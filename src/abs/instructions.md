@@ -47,6 +47,54 @@ This server provides a Model Context Protocol interface to the ABS Data API (Bet
      - `structureVersion` (string): Version of the structure
    - Returns: Specific version of the requested structure
 
+## Project Overview
+This project implements an ABS Data API MCP Server using TypeScript. It provides tools for retrieving statistical data from the ABS API and is compliant with the Model Context Protocol.
+
+## Installation Instructions
+To install the necessary dependencies, run:
+```bash
+npm install
+```
+
+## Running the Server
+After building the project, start the server using:
+```bash
+node dist/index.js
+```
+
+## Connecting with MCP Inspector
+1. Open MCP Inspector.
+2. Click "Connect" in the top-right corner.
+3. Select "Standard Input/Output".
+4. Use the command `dist/index.js` (not `build/index.js`).
+5. Leave arguments empty and connect.
+
+## Available Tools
+- **get_data**: Retrieves data from a specific dataflow.
+- **get_structure_list**: Lists available structures from the ABS API.
+- **get_structure**: Fetches specific structure details.
+- **get_structure_version**: Retrieves specific versions of structures.
+
+## Testing Tools
+You can test the tools using MCP Inspector by sending requests similar to the following:
+- For **get_structure_list**:
+```json
+{
+  "structureType": "datastructure",
+  "agencyId": "ABS"
+}
+```
+- For **get_data**:
+```json
+{
+  "dataflowIdentifier": "ABS_CENSUS2021_T01",
+  "dataKey": "all",
+  "format": "json"
+}
+```
+
+Ensure the server is running before testing the tools.
+
 ## Endpoints
 
 The server interacts with the following ABS Data API endpoints:
