@@ -10,7 +10,7 @@ import fetch from "node-fetch";
 import { z } from "zod";
 import {
   GetDataSchema,
-  GetStructureListSchema,  
+  GetStructureListSchema,
   GetStructureSchema,
   GetStructureVersionSchema,
   type DataResponse,
@@ -38,12 +38,21 @@ const server = new Server(
 let dataflowCache: DataflowInfo[] | null = null;
 
 // Base URL for ABS Data API
-const ABS_API_BASE_URL = "https://data.api.abs.gov.au";
+const ABS_API_BASE_URL = "https://api.data.abs.gov.au";
 
 // Helper function to make API requests
 async function makeRequest<T>(url: string): Promise<T> {
+  // Always append format=jsondata if not already present
+  const urlWithFormat = url + (url.includes('?') ? '&' : '?') + 'format=jsondata';
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(urlWithFormat, {
+      headers: {
+        'Accept': 'application/vnd.sdmx.data+json;version=2.0.0',
+        'User-Agent': 'ABS-MCP-Server/0.1.0'
+      }
+    });
+
     const text = await response.text();
 
     if (!response.ok) {
@@ -52,25 +61,11 @@ async function makeRequest<T>(url: string): Promise<T> {
       throw new Error(`API request failed: ${response.statusText}`);
     }
 
-    // Check if the response is XML
-    if (text.trim().startsWith('<?xml')) {
-      // If we're expecting JSON but got XML, we should convert it
-      // For now, we'll return the XML as a string
-      return {
-        format: 'xml' as const,
-        content: text
-      } as unknown as T;
-    }
-
     try {
       return JSON.parse(text) as T;
     } catch (parseError) {
       console.error("Failed to parse response as JSON:", parseError);
-      // Return the raw text if JSON parsing fails
-      return {
-        format: 'raw' as const,
-        content: text
-      } as unknown as T;
+      throw new Error("Failed to parse response as JSON");
     }
   } catch (error) {
     console.error("Error making request:", error);
@@ -84,38 +79,15 @@ async function getData(
   dataKey: string,
   format: "xml" | "json" | "csv" = "json"
 ): Promise<DataResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/data/${dataflowIdentifier}/${dataKey}?format=${format}`;
-  const response = await makeRequest<DataResponse>(url);
-  
-  // If the response is in XML format and JSON was requested, attempt conversion
-  if (format === 'json' && (response as any).format === 'xml') {
-    // For now, return a structured error response
-    return {
-      header: {
-        id: dataflowIdentifier,
-        test: false,
-        prepared: new Date().toISOString(),
-        sender: {
-          id: 'ABS',
-          name: 'Australian Bureau of Statistics'
-        }
-      },
-      dataSets: [],
-      error: 'Received XML response when JSON was requested. XML parsing not yet implemented.',
-      format: 'xml' as const,
-      content: (response as any).content
-    };
-  }
-  
-  return response;
+  const url = `${ABS_API_BASE_URL}/data/${dataflowIdentifier}/${dataKey}`;
+  return makeRequest<DataResponse>(url);
 }
 
 async function getStructureList(
   structureType: string,
   agencyId: string
 ): Promise<StructureListResponse> {
-  // Explicitly request JSON format
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}?format=json`;
+  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}`;
   return makeRequest<StructureListResponse>(url);
 }
 
@@ -124,7 +96,7 @@ async function getStructure(
   agencyId: string,
   structureId: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}?format=json`;
+  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}/${structureId}`;
   return makeRequest<StructureResponse>(url);
 }
 
@@ -134,7 +106,7 @@ async function getStructureVersion(
   structureId: string,
   structureVersion: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}/${structureVersion}?format=json`;
+  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}/${structureId}/${structureVersion}`;
   return makeRequest<StructureResponse>(url);
 }
 
@@ -142,26 +114,15 @@ async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
   const dataflows: DataflowInfo[] = [];
 
   try {
-    if (response.format === 'xml') {
-      console.error('Received XML response, parsing not yet implemented');
-      return [{
-        id: 'error',
-        name: 'XML Response - Parsing not implemented',
-        description: 'The ABS API returned XML data. XML parsing will be implemented soon.',
-        agency: 'ABS',
-        version: '1.0'
-      }];
-    }
-
-    const structures = response.structures || [];
+    const structures = response.data?.structures || [];
 
     for (const flow of structures) {
       dataflows.push({
-        id: flow.id,
-        name: flow.name || flow.id,
-        description: "", 
-        agency: flow.agency,
-        version: flow.version
+        id: flow.id || '',
+        name: flow.names?.[0]?.name || flow.id || '',
+        description: flow.descriptions?.[0]?.description || '',
+        agency: flow.agencyID || 'ABS',
+        version: flow.version || '1.0.0'
       });
     }
   } catch (err) {
@@ -207,28 +168,28 @@ async function parseDataflowDetails(response: StructureResponse): Promise<Datafl
       throw new Error("Invalid structure response");
     }
 
-    // Extract dimensions with proper type handling
+    // Extract dimensions
     const dimensions = (structure.dataStructureComponents?.dimensionList?.dimensions || [])
       .map((dim: any) => ({
-        id: String(dim.id),
-        name: String(dim.name?.[0]?.value || dim.id),
+        id: String(dim.id || ''),
+        name: String(dim.name?.[0]?.name || dim.id || ''),
         values: (dim.localRepresentation?.enumeration || [])
           .map((enumValue: any) => ({
-            id: String(enumValue.id),
-            name: String(enumValue.name?.[0]?.value || enumValue.id)
+            id: String(enumValue.id || ''),
+            name: String(enumValue.name?.[0]?.name || enumValue.id || '')
           }))
       }));
 
-    // Extract measures with proper type handling
+    // Extract measures
     const measures = (structure.dataStructureComponents?.measureList?.measures || [])
       .map((measure: any) => ({
-        id: String(measure.id),
-        name: String(measure.name?.[0]?.value || measure.id)
+        id: String(measure.id || ''),
+        name: String(measure.name?.[0]?.name || measure.id || '')
       }));
 
     return {
-      id: String(structure.id),
-      name: String(structure.name?.[0]?.value || structure.id),
+      id: String(structure.id || ''),
+      name: String(structure.name?.[0]?.name || structure.id || ''),
       dimensions,
       measures,
       attributes: structure.dataStructureComponents?.attributeList || []
