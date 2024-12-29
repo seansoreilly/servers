@@ -22,6 +22,9 @@ import {
   DataflowDetailsSchema,
 } from "./schemas.js";
 
+const MAX_RESPONSE_SIZE = 900000; // Set slightly below the 1MB limit
+const DEFAULT_PAGE_SIZE = 100;
+
 function log(...args: any[]) {
   console.error('\x1b[90m', ...args, '\x1b[0m');  // Gray color for logs
 }
@@ -45,7 +48,7 @@ let dataflowCache: DataflowInfo[] | null = null;
 const ABS_DATA_API_URL = "https://api.data.abs.gov.au/data";
 const ABS_SDMX_API_URL = "https://data.api.abs.gov.au/rest";
 
-// Helper function to make API requests
+// Helper function to make API requests with pagination
 async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> {
   try {
     log('\n=== API Request ===');
@@ -64,8 +67,24 @@ async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> 
     log('\n=== API Response ===');
     log('Status:', response.status, response.statusText);
     const text = await response.text();
+    
+    // Check response size
+    if (text.length > MAX_RESPONSE_SIZE) {
+      log(`Response size (${text.length} bytes) exceeds limit (${MAX_RESPONSE_SIZE} bytes). Truncating...`);
+      const truncatedText = text.substring(0, MAX_RESPONSE_SIZE);
+      log('Truncated Response (first 1000 chars):');
+      log(truncatedText.substring(0, 1000) + '...');
+      
+      try {
+        // Attempt to parse the truncated response
+        return JSON.parse(truncatedText) as T;
+      } catch (parseError) {
+        throw new Error("Response too large and couldn't parse truncated version");
+      }
+    }
+
     log('Response Headers:', JSON.stringify(Object.fromEntries([...response.headers]), null, 2));
-    log('Response Body (truncated):');
+    log('Response Body Preview (first 1000 chars):');
     log(text.substring(0, 1000) + (text.length > 1000 ? '...' : ''));
     log('===================\n');
 
@@ -80,7 +99,7 @@ async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> 
     } catch (parseError) {
       console.error('\n=== Parse Error ===');
       console.error("Failed to parse response as JSON:", parseError);
-      console.error('Full response text:', text);
+      console.error('Response Preview:', text.substring(0, 1000));
       console.error('==================\n');
       throw new Error("Failed to parse response as JSON");
     }
@@ -92,21 +111,23 @@ async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> 
   }
 }
 
-// Main API functions
+// Main API functions with pagination
 async function getData(
   dataflowIdentifier: string,
   dataKey: string,
   format: "xml" | "json" | "csv" = "json"
 ): Promise<DataResponse> {
-  const url = `${ABS_DATA_API_URL}/${dataflowIdentifier}/${dataKey}?format=jsondata&dimensionAtObservation=AllDimensions`;
+  const url = `${ABS_DATA_API_URL}/${dataflowIdentifier}/${dataKey}?format=jsondata&dimensionAtObservation=AllDimensions&limit=${DEFAULT_PAGE_SIZE}`;
   return makeRequest<DataResponse>(url, false);
 }
 
 async function getStructureList(
   structureType: string,
-  agencyId: string
+  agencyId: string,
+  page: number = 1
 ): Promise<StructureListResponse> {
-  const url = `${ABS_SDMX_API_URL}/${structureType}/${agencyId}`;
+  const offset = (page - 1) * DEFAULT_PAGE_SIZE;
+  const url = `${ABS_SDMX_API_URL}/${structureType}/${agencyId}?offset=${offset}&limit=${DEFAULT_PAGE_SIZE}`;
   return makeRequest<StructureListResponse>(url, true);
 }
 
@@ -130,92 +151,97 @@ async function getStructureVersion(
 }
 
 async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
-  const dataflows: DataflowInfo[] = [];
-
-  try {
-    const structures = response.data?.structures || [];
-
-    for (const flow of structures) {
-      dataflows.push({
-        id: flow.id || '',
-        name: flow.names?.[0]?.name || flow.id || '',
-        description: flow.descriptions?.[0]?.description || '',
-        agency: flow.agencyID || 'ABS',
-        version: flow.version || '1.0.0'
-      });
-    }
-  } catch (err) {
-    const error = err as Error;
-    console.error("Error parsing dataflow list:", error);
-    return [{
-      id: 'error',
-      name: 'Error parsing response',
-      description: error instanceof Error ? error.message : 'Unknown error occurred',
-      agency: 'ABS',
-      version: '1.0'
-    }];
+  if (!response || typeof response !== 'object') {
+    throw new Error("Invalid response format: not an object");
   }
 
-  return dataflows;
+  const structures = response.data?.structures || response.structures || [];
+  
+  if (!Array.isArray(structures)) {
+    throw new Error("Invalid response format: structures is not an array");
+  }
+
+  return structures.map(flow => ({
+    id: String(flow.id || ''),
+    name: String(flow.names?.[0]?.name || flow.id || ''),
+    description: String(flow.descriptions?.[0]?.description || ''),
+    agency: String(flow.agencyID || 'ABS'),
+    version: String(flow.version || '1.0.0')
+  }));
 }
 
 async function getAvailableDataflows(): Promise<DataflowInfo[]> {
   if (dataflowCache) return structuredClone(dataflowCache);
+  
   try {
-    const response = await getStructureList("dataflow", "ABS");
-    dataflowCache = await parseDataflowList(response);
+    const allDataflows: DataflowInfo[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await getStructureList("dataflow", "ABS", page);
+      
+      if (!response || !response.structures) {
+        throw new Error("Invalid response format from ABS API");
+      }
+
+      const dataflows = await parseDataflowList(response);
+      
+      if (dataflows.length === 0) {
+        hasMore = false;
+      } else {
+        allDataflows.push(...dataflows);
+        page++;
+      }
+
+      // Break if we have enough dataflows to avoid too many requests
+      if (allDataflows.length >= 1000) {
+        log('Reached maximum dataflow limit (1000), stopping pagination');
+        hasMore = false;
+      }
+    }
+
+    dataflowCache = allDataflows;
     return structuredClone(dataflowCache);
-  } catch (err) {
-    const error = err as Error;
+  } catch (error) {
     console.error("Error getting dataflows:", error);
-    return [{
-      id: 'error', 
-      name: 'Error fetching dataflows',
-      description: error instanceof Error ? error.message : 'Unknown error occurred',
-      agency: 'ABS',
-      version: '1.0'
-    }];
+    throw error; // Propagate the error instead of returning an error object
   }
 }
 
 async function parseDataflowDetails(response: StructureResponse): Promise<DataflowDetails> {
-  try {
-    const structure = response.content as any;
-
-    if (!structure) {
-      throw new Error("Invalid structure response");
-    }
-
-    // Extract dimensions
-    const dimensions = (structure.dataStructureComponents?.dimensionList?.dimensions || [])
-      .map((dim: any) => ({
-        id: String(dim.id || ''),
-        name: String(dim.name?.[0]?.name || dim.id || ''),
-        values: (dim.localRepresentation?.enumeration || [])
-          .map((enumValue: any) => ({
-            id: String(enumValue.id || ''),
-            name: String(enumValue.name?.[0]?.name || enumValue.id || '')
-          }))
-      }));
-
-    // Extract measures
-    const measures = (structure.dataStructureComponents?.measureList?.measures || [])
-      .map((measure: any) => ({
-        id: String(measure.id || ''),
-        name: String(measure.name?.[0]?.name || measure.id || '')
-      }));
-
-    return {
-      id: String(structure.id || ''),
-      name: String(structure.name?.[0]?.name || structure.id || ''),
-      dimensions,
-      measures,
-      attributes: structure.dataStructureComponents?.attributeList || []
-    };
-  } catch (error) {
-    console.error("Error parsing dataflow details:", error);
-    throw new Error("Failed to parse dataflow details");
+  if (!response || !response.content) {
+    throw new Error("Invalid structure response");
   }
+
+  const structure = response.content as any;
+
+  // Extract dimensions with better error handling
+  const dimensions = (structure.dataStructureComponents?.dimensionList?.dimensions || [])
+    .map((dim: any) => ({
+      id: String(dim.id || ''),
+      name: String(dim.name?.[0]?.name || dim.id || ''),
+      values: (dim.localRepresentation?.enumeration || [])
+        .map((enumValue: any) => ({
+          id: String(enumValue.id || ''),
+          name: String(enumValue.name?.[0]?.name || enumValue.id || '')
+        }))
+    }));
+
+  // Extract measures with better error handling
+  const measures = (structure.dataStructureComponents?.measureList?.measures || [])
+    .map((measure: any) => ({
+      id: String(measure.id || ''),
+      name: String(measure.name?.[0]?.name || measure.id || '')
+    }));
+
+  return {
+    id: String(structure.id || ''),
+    name: String(structure.name?.[0]?.name || structure.id || ''),
+    dimensions,
+    measures,
+    attributes: structure.dataStructureComponents?.attributeList || []
+  };
 }
 
 async function getDataflowDetails(dataflowId: string): Promise<DataflowDetails> {
@@ -223,7 +249,7 @@ async function getDataflowDetails(dataflowId: string): Promise<DataflowDetails> 
   return parseDataflowDetails(structure);
 }
 
-// Tool definitions
+// Tool definitions remain the same
 const tools: Tool[] = [
   {
     name: "get_data",
