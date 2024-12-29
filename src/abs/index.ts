@@ -163,7 +163,6 @@ async function getAvailableDataflows(): Promise<DataflowInfo[]> {
   if (dataflowCache) return structuredClone(dataflowCache);
   try {
     const response = await getStructureList("dataflow", "ABS");
-    console.log('response', response);
     dataflowCache = await parseDataflowList(response);
     return structuredClone(dataflowCache);
   } catch (err) {
