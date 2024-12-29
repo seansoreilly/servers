@@ -1,3 +1,11 @@
+Note 2 APIs:
+
+Data API:
+https://api.data.abs.gov.au/data/
+
+SDMX API:
+https://data.api.abs.gov.au/rest/
+
 # ABS Data API MCP Server
 
 Model Context Protocol (MCP) Server for the Australian Bureau of Statistics (ABS) Data API, enabling access to Australian statistical data including economic, social and Census information.
@@ -16,6 +24,7 @@ This server provides a Model Context Protocol interface to the ABS Data API (Bet
 ## Tools
 
 1. `get_data`
+
    - Retrieve data from a specific dataflow
    - Inputs:
      - `dataflowIdentifier` (string): The identifier of the dataflow
@@ -24,6 +33,7 @@ This server provides a Model Context Protocol interface to the ABS Data API (Bet
    - Returns: Statistical data in the requested format
 
 2. `get_structure_list`
+
    - Get all structures of a specific type
    - Inputs:
      - `structureType` (string): Type of structure to retrieve
@@ -31,6 +41,7 @@ This server provides a Model Context Protocol interface to the ABS Data API (Bet
    - Returns: List of available structures
 
 3. `get_structure`
+
    - Get a specific structure
    - Inputs:
      - `structureType` (string): Type of structure to retrieve
@@ -48,21 +59,27 @@ This server provides a Model Context Protocol interface to the ABS Data API (Bet
    - Returns: Specific version of the requested structure
 
 ## Project Overview
+
 This project implements an ABS Data API MCP Server using TypeScript. It provides tools for retrieving statistical data from the ABS API and is compliant with the Model Context Protocol.
 
 ## Installation Instructions
+
 To install the necessary dependencies, run:
+
 ```bash
 npm install
 ```
 
 ## Running the Server
+
 After building the project, start the server using:
+
 ```bash
 node dist/index.js
 ```
 
 ## Connecting with MCP Inspector
+
 1. Open MCP Inspector.
 2. Click "Connect" in the top-right corner.
 3. Select "Standard Input/Output".
@@ -70,21 +87,27 @@ node dist/index.js
 5. Leave arguments empty and connect.
 
 ## Available Tools
+
 - **get_data**: Retrieves data from a specific dataflow.
 - **get_structure_list**: Lists available structures from the ABS API.
 - **get_structure**: Fetches specific structure details.
 - **get_structure_version**: Retrieves specific versions of structures.
 
 ## Testing Tools
+
 You can test the tools using MCP Inspector by sending requests similar to the following:
+
 - For **get_structure_list**:
+
 ```json
 {
   "structureType": "datastructure",
   "agencyId": "ABS"
 }
 ```
+
 - For **get_data**:
+
 ```json
 {
   "dataflowIdentifier": "ABS_CENSUS2021_T01",
@@ -111,17 +134,13 @@ The server interacts with the following ABS Data API endpoints:
 Add the following to your `claude_desktop_config.json`:
 
 #### Docker
+
 ```json
 {
   "mcpServers": {
     "abs": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "mcp/abs"
-      ]
+      "args": ["run", "-i", "--rm", "mcp/abs"]
     }
   }
 }
@@ -134,10 +153,7 @@ Add the following to your `claude_desktop_config.json`:
   "mcpServers": {
     "abs": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-abs"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-abs"]
     }
   }
 }
@@ -162,6 +178,7 @@ docker build -t mcp/abs -f src/abs/Dockerfile .
 ## Support
 
 For issues or questions regarding the ABS Data API:
+
 - Email: api.data@abs.gov.au
 - You can request to join their register of interest to be notified of API changes
 
@@ -173,6 +190,5 @@ This MCP server is licensed under the MIT License. See the LICENSE file in the p
 
 - SDMX RESTful web services specification: [GitHub](https://github.com/sdmx-twg/sdmx-rest)
 - ABS Website: [https://www.abs.gov.au/](https://www.abs.gov.au/)
-
 
 Do not change any files outside of C:\projects\servers\src\abs\

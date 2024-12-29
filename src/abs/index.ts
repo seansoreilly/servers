@@ -37,23 +37,27 @@ const server = new Server(
 // Cache for dataflows
 let dataflowCache: DataflowInfo[] | null = null;
 
-// Base URL for ABS Data API
-const ABS_API_BASE_URL = "https://api.data.abs.gov.au";
+// Base URLs for ABS APIs
+const ABS_DATA_API_URL = "https://api.data.abs.gov.au/data";
+const ABS_SDMX_API_URL = "https://data.api.abs.gov.au/rest";
 
 // Helper function to make API requests
-async function makeRequest<T>(url: string): Promise<T> {
-  // Always append format=jsondata if not already present
-  const urlWithFormat = url + (url.includes('?') ? '&' : '?') + 'format=jsondata';
-
+async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> {
   try {
-    const response = await fetch(urlWithFormat, {
-      headers: {
-        'Accept': 'application/vnd.sdmx.data+json;version=2.0.0',
-        'User-Agent': 'ABS-MCP-Server/0.1.0'
-      }
-    });
+    console.log('Making request to:', url);
+    const headers = isSDMX ? {
+      'Accept': 'application/vnd.sdmx.structure+json;version=2.1'
+    } : {
+      'Accept': 'application/vnd.sdmx.data+json'
+    };
 
+    console.log('Headers:', headers);
+
+    const response = await fetch(url, { headers });
+
+    console.log('Response status:', response.status);
     const text = await response.text();
+    console.log('Response text (first 500 chars):', text.substring(0, 500));
 
     if (!response.ok) {
       console.error(`API request failed: ${response.statusText}`);
@@ -64,7 +68,7 @@ async function makeRequest<T>(url: string): Promise<T> {
     try {
       return JSON.parse(text) as T;
     } catch (parseError) {
-      console.error("Failed to parse response as JSON:", parseError);
+      console.error("Failed to parse response as JSON:", parseError, text);
       throw new Error("Failed to parse response as JSON");
     }
   } catch (error) {
@@ -79,16 +83,16 @@ async function getData(
   dataKey: string,
   format: "xml" | "json" | "csv" = "json"
 ): Promise<DataResponse> {
-  const url = `${ABS_API_BASE_URL}/data/${dataflowIdentifier}/${dataKey}`;
-  return makeRequest<DataResponse>(url);
+  const url = `${ABS_DATA_API_URL}/${dataflowIdentifier}/${dataKey}?format=jsondata&dimensionAtObservation=AllDimensions`;
+  return makeRequest<DataResponse>(url, false);
 }
 
 async function getStructureList(
   structureType: string,
   agencyId: string
 ): Promise<StructureListResponse> {
-  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}`;
-  return makeRequest<StructureListResponse>(url);
+  const url = `${ABS_SDMX_API_URL}/${structureType}/${agencyId}`;
+  return makeRequest<StructureListResponse>(url, true);
 }
 
 async function getStructure(
@@ -96,8 +100,8 @@ async function getStructure(
   agencyId: string,
   structureId: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}/${structureId}`;
-  return makeRequest<StructureResponse>(url);
+  const url = `${ABS_SDMX_API_URL}/${structureType}/${agencyId}/${structureId}`;
+  return makeRequest<StructureResponse>(url, true);
 }
 
 async function getStructureVersion(
@@ -106,8 +110,8 @@ async function getStructureVersion(
   structureId: string,
   structureVersion: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/structure/${structureType}/${agencyId}/${structureId}/${structureVersion}`;
-  return makeRequest<StructureResponse>(url);
+  const url = `${ABS_SDMX_API_URL}/${structureType}/${agencyId}/${structureId}/${structureVersion}`;
+  return makeRequest<StructureResponse>(url, true);
 }
 
 async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
