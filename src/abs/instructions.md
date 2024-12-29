@@ -175,4 +175,4 @@ This MCP server is licensed under the MIT License. See the LICENSE file in the p
 - ABS Website: [https://www.abs.gov.au/](https://www.abs.gov.au/)
 
 
-Do not change any files out of C:\projects\servers\src\abs\
+Do not change any files outside of C:\projects\servers\src\abs\
