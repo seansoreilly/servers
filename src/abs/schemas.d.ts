@@ -1,38 +1,16 @@
 import { z } from "zod";
 export declare const DataflowSchema: z.ZodObject<{
     id: z.ZodString;
+    agencyID: z.ZodString;
     name: z.ZodString;
-    version: z.ZodString;
-    agency: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     id: string;
+    agencyID: string;
     name: string;
-    version: string;
-    agency: string;
 }, {
     id: string;
+    agencyID: string;
     name: string;
-    version: string;
-    agency: string;
-}>;
-export declare const StructureSchema: z.ZodObject<{
-    id: z.ZodString;
-    name: z.ZodString;
-    version: z.ZodString;
-    agency: z.ZodString;
-    type: z.ZodString;
-}, "strip", z.ZodTypeAny, {
-    id: string;
-    name: string;
-    version: string;
-    agency: string;
-    type: string;
-}, {
-    id: string;
-    name: string;
-    version: string;
-    agency: string;
-    type: string;
 }>;
 export declare const GetDataSchema: z.ZodObject<{
     dataflowIdentifier: z.ZodString;
@@ -153,76 +131,29 @@ export declare const DataResponseSchema: z.ZodObject<{
     content?: string | undefined;
 }>;
 export declare const StructureListResponseSchema: z.ZodObject<{
-    structures: z.ZodArray<z.ZodObject<{
-        id: z.ZodString;
-        name: z.ZodString;
-        version: z.ZodString;
-        agency: z.ZodString;
-        type: z.ZodString;
-    }, "strip", z.ZodTypeAny, {
-        id: string;
-        name: string;
-        version: string;
-        agency: string;
-        type: string;
-    }, {
-        id: string;
-        name: string;
-        version: string;
-        agency: string;
-        type: string;
-    }>, "many">;
+    structures: z.ZodArray<z.ZodRecord<z.ZodString, z.ZodUnknown>, "many">;
     format: z.ZodOptional<z.ZodEnum<["json", "xml", "raw"]>>;
     content: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    structures: {
-        id: string;
-        name: string;
-        version: string;
-        agency: string;
-        type: string;
-    }[];
+    structures: Record<string, unknown>[];
     format?: "xml" | "json" | "raw" | undefined;
     content?: string | undefined;
 }, {
-    structures: {
-        id: string;
-        name: string;
-        version: string;
-        agency: string;
-        type: string;
-    }[];
+    structures: Record<string, unknown>[];
     format?: "xml" | "json" | "raw" | undefined;
     content?: string | undefined;
 }>;
-export declare const StructureResponseSchema: z.ZodObject<z.objectUtil.extendShape<{
-    id: z.ZodString;
-    name: z.ZodString;
-    version: z.ZodString;
-    agency: z.ZodString;
-    type: z.ZodString;
-}, {
+export declare const StructureResponseSchema: z.ZodObject<{
     content: z.ZodRecord<z.ZodString, z.ZodUnknown>;
     format: z.ZodOptional<z.ZodEnum<["json", "xml", "raw"]>>;
-}>, "strip", z.ZodTypeAny, {
-    id: string;
-    name: string;
-    version: string;
-    agency: string;
-    type: string;
+}, "strip", z.ZodTypeAny, {
     content: Record<string, unknown>;
     format?: "xml" | "json" | "raw" | undefined;
 }, {
-    id: string;
-    name: string;
-    version: string;
-    agency: string;
-    type: string;
     content: Record<string, unknown>;
     format?: "xml" | "json" | "raw" | undefined;
 }>;
 export type Dataflow = z.infer<typeof DataflowSchema>;
-export type Structure = z.infer<typeof StructureSchema>;
 export type GetDataParams = z.infer<typeof GetDataSchema>;
 export type GetStructureListParams = z.infer<typeof GetStructureListSchema>;
 export type GetStructureParams = z.infer<typeof GetStructureSchema>;
@@ -240,10 +171,8 @@ export declare const DataflowDetailsSchema: z.ZodObject<{
 }>;
 export type DataflowInfo = {
     id: string;
+    agencyID: string;
     name: string;
-    description?: string;
-    agency: string;
-    version: string;
 };
 export type DimensionValue = {
     id: string;

@@ -3,17 +3,8 @@ import { z } from "zod";
 // Base schemas for common SDMX structures
 export const DataflowSchema = z.object({
   id: z.string().describe("Dataflow identifier"),
+  agencyID: z.string().describe("Agency identifier"),
   name: z.string().describe("Dataflow name"),
-  version: z.string().describe("Dataflow version"),
-  agency: z.string().describe("Agency identifier"),
-});
-
-export const StructureSchema = z.object({
-  id: z.string().describe("Structure identifier"),
-  name: z.string().describe("Structure name"),
-  version: z.string().describe("Structure version"),
-  agency: z.string().describe("Agency identifier"),
-  type: z.string().describe("Type of structure"),
 });
 
 // Request schemas for tools
@@ -56,19 +47,18 @@ export const DataResponseSchema = z.object({
 });
 
 export const StructureListResponseSchema = z.object({
-  structures: z.array(StructureSchema),
+  structures: z.array(z.record(z.unknown())),
   format: z.enum(['json', 'xml', 'raw']).optional(),
   content: z.string().optional()
 });
 
-export const StructureResponseSchema = StructureSchema.extend({
+export const StructureResponseSchema = z.object({
   content: z.record(z.unknown()),
   format: z.enum(['json', 'xml', 'raw']).optional(),
 });
 
 // Export types
 export type Dataflow = z.infer<typeof DataflowSchema>;
-export type Structure = z.infer<typeof StructureSchema>;
 export type GetDataParams = z.infer<typeof GetDataSchema>;
 export type GetStructureListParams = z.infer<typeof GetStructureListSchema>;
 export type GetStructureParams = z.infer<typeof GetStructureSchema>;
@@ -86,10 +76,8 @@ export const DataflowDetailsSchema = z.object({
 
 export type DataflowInfo = {
   id: string;
+  agencyID: string;
   name: string;
-  description?: string;
-  agency: string;
-  version: string;
 };
 
 export type DimensionValue = {

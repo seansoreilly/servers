@@ -22,6 +22,8 @@ import {
   DataflowDetailsSchema,
 } from "./schemas.js";
 
+import { dataflows } from "./dataflows.js";
+
 const MAX_RESPONSE_SIZE = 900000; // Set slightly below the 1MB limit
 const DEFAULT_PAGE_SIZE = 100;
 
@@ -67,14 +69,14 @@ async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> 
     log('\n=== API Response ===');
     log('Status:', response.status, response.statusText);
     const text = await response.text();
-    
+
     // Check response size
     if (text.length > MAX_RESPONSE_SIZE) {
       log(`Response size (${text.length} bytes) exceeds limit (${MAX_RESPONSE_SIZE} bytes). Truncating...`);
       const truncatedText = text.substring(0, MAX_RESPONSE_SIZE);
       log('Truncated Response (first 1000 chars):');
       log(truncatedText.substring(0, 1000) + '...');
-      
+
       try {
         // Attempt to parse the truncated response
         return JSON.parse(truncatedText) as T;
@@ -156,7 +158,7 @@ async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
   }
 
   const structures = response.data?.structures || response.structures || [];
-  
+
   if (!Array.isArray(structures)) {
     throw new Error("Invalid response format: structures is not an array");
   }
@@ -164,49 +166,13 @@ async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
   return structures.map(flow => ({
     id: String(flow.id || ''),
     name: String(flow.names?.[0]?.name || flow.id || ''),
-    description: String(flow.descriptions?.[0]?.description || ''),
-    agency: String(flow.agencyID || 'ABS'),
-    version: String(flow.version || '1.0.0')
+    agencyID: String(flow.agencyID || 'ABS')
   }));
 }
 
 async function getAvailableDataflows(): Promise<DataflowInfo[]> {
-  if (dataflowCache) return structuredClone(dataflowCache);
-  
-  try {
-    const allDataflows: DataflowInfo[] = [];
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-      const response = await getStructureList("dataflow", "ABS", page);
-      
-      if (!response || !response.structures) {
-        throw new Error("Invalid response format from ABS API");
-      }
-
-      const dataflows = await parseDataflowList(response);
-      
-      if (dataflows.length === 0) {
-        hasMore = false;
-      } else {
-        allDataflows.push(...dataflows);
-        page++;
-      }
-
-      // Break if we have enough dataflows to avoid too many requests
-      if (allDataflows.length >= 1000) {
-        log('Reached maximum dataflow limit (1000), stopping pagination');
-        hasMore = false;
-      }
-    }
-
-    dataflowCache = allDataflows;
-    return structuredClone(dataflowCache);
-  } catch (error) {
-    console.error("Error getting dataflows:", error);
-    throw error; // Propagate the error instead of returning an error object
-  }
+  // Return first 10 dataflows to stay within size limits
+  return dataflows.slice(0, 10);
 }
 
 async function parseDataflowDetails(response: StructureResponse): Promise<DataflowDetails> {
