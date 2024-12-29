@@ -17,11 +17,15 @@ import {
   type DataResponse,
   type StructureListResponse,
   type StructureResponse,
+  type DataflowInfo,
+  type DataflowDetails,
+  DataflowListSchema,
+  DataflowDetailsSchema,
 } from "./schemas.js";
 
 const server = new Server(
   {
-    name: "abs-mcp-server",
+    name: "abs",
     version: "0.1.0",
   },
   {
@@ -80,6 +84,86 @@ async function getStructureVersion(
   return makeRequest<StructureResponse>(url);
 }
 
+let dataflowCache: DataflowInfo[] | null = null;
+
+async function parseDataflowList(response: StructureListResponse): Promise<DataflowInfo[]> {
+  const dataflows: DataflowInfo[] = [];
+
+  try {
+    // The response structure has changed to use 'structures' instead of 'data'
+    const structures = response.structures || [];
+
+    for (const flow of structures) {
+      dataflows.push({
+        id: flow.id,
+        name: flow.name || flow.id,
+        description: "", // Add description if available in the structure
+        agency: flow.agency,
+        version: flow.version
+      });
+    }
+  } catch (error) {
+    console.error("Error parsing dataflow list:", error);
+    throw new Error("Failed to parse dataflow list");
+  }
+
+  return dataflows;
+}
+
+async function getAvailableDataflows(): Promise<DataflowInfo[]> {
+  if (dataflowCache) return dataflowCache;
+
+  const response = await getStructureList("dataflow", "ABS");
+  dataflowCache = await parseDataflowList(response);
+  return dataflowCache;
+}
+
+async function parseDataflowDetails(response: StructureResponse): Promise<DataflowDetails> {
+  try {
+    // Add type assertion to help TypeScript understand the structure
+    const structure = response.content as any;
+
+    if (!structure) {
+      throw new Error("Invalid structure response");
+    }
+
+    // Extract dimensions with proper type handling
+    const dimensions = (structure.dataStructureComponents?.dimensionList?.dimensions || [])
+      .map((dim: any) => ({
+        id: String(dim.id),
+        name: String(dim.name?.[0]?.value || dim.id),
+        values: (dim.localRepresentation?.enumeration || [])
+          .map((enumValue: any) => ({
+            id: String(enumValue.id),
+            name: String(enumValue.name?.[0]?.value || enumValue.id)
+          }))
+      }));
+
+    // Extract measures with proper type handling
+    const measures = (structure.dataStructureComponents?.measureList?.measures || [])
+      .map((measure: any) => ({
+        id: String(measure.id),
+        name: String(measure.name?.[0]?.value || measure.id)
+      }));
+
+    return {
+      id: String(structure.id),
+      name: String(structure.name?.[0]?.value || structure.id),
+      dimensions,
+      measures,
+      attributes: structure.dataStructureComponents?.attributeList || []
+    };
+  } catch (error) {
+    console.error("Error parsing dataflow details:", error);
+    throw new Error("Failed to parse dataflow details");
+  }
+}
+
+async function getDataflowDetails(dataflowId: string): Promise<DataflowDetails> {
+  const structure = await getStructure("datastructure", "ABS", dataflowId);
+  return parseDataflowDetails(structure);
+}
+
 const tools: Tool[] = [
   {
     name: "get_data",
@@ -131,6 +215,28 @@ const tools: Tool[] = [
         structureVersion: { type: "string", description: "Version of the structure" }
       },
       required: ["structureType", "agencyId", "structureId", "structureVersion"]
+    }
+  },
+  {
+    name: "list_dataflows",
+    description: "List all available ABS statistical dataflows",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "get_dataflow_details",
+    description: "Get detailed information about a specific dataflow including its dimensions and structure",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataflowId: {
+          type: "string",
+          description: "The identifier of the dataflow to retrieve details for"
+        }
+      },
+      required: ["dataflowId"]
     }
   }
 ];
@@ -185,6 +291,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args.structureVersion
         );
         return { toolResult: structure };
+      }
+
+      case "list_dataflows": {
+        const dataflows = await getAvailableDataflows();
+        return { toolResult: dataflows };
+      }
+
+      case "get_dataflow_details": {
+        const args = DataflowDetailsSchema.parse(request.params.arguments);
+        const details = await getDataflowDetails(args.dataflowId);
+        return { toolResult: details };
       }
 
       default:

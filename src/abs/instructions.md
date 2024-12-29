@@ -173,3 +173,6 @@ This MCP server is licensed under the MIT License. See the LICENSE file in the p
 
 - SDMX RESTful web services specification: [GitHub](https://github.com/sdmx-twg/sdmx-rest)
 - ABS Website: [https://www.abs.gov.au/](https://www.abs.gov.au/)
+
+
+Do not change any files out of C:\projects\servers\src\abs\

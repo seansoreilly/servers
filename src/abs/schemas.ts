@@ -70,3 +70,42 @@ export type GetStructureVersionParams = z.infer<typeof GetStructureVersionSchema
 export type DataResponse = z.infer<typeof DataResponseSchema>;
 export type StructureListResponse = z.infer<typeof StructureListResponseSchema>;
 export type StructureResponse = z.infer<typeof StructureResponseSchema>;
+
+// Add these new schemas and types
+export const DataflowListSchema = z.object({});
+
+export const DataflowDetailsSchema = z.object({
+  dataflowId: z.string().describe("The identifier of the dataflow")
+});
+
+export type DataflowInfo = {
+  id: string;
+  name: string;
+  description?: string;
+  agency: string;
+  version: string;
+};
+
+export type DimensionValue = {
+  id: string;
+  name: string;
+};
+
+export type Dimension = {
+  id: string;
+  name: string;
+  values: DimensionValue[];
+};
+
+export type Measure = {
+  id: string;
+  name: string;
+};
+
+export type DataflowDetails = {
+  id: string;
+  name: string;
+  dimensions: Dimension[];
+  measures: Measure[];
+  attributes: any[]; // Type can be made more specific based on actual API response
+};
