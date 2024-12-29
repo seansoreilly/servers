@@ -5,13 +5,10 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "mcp-server-abs": "dist/index.js"
+    "mcp-server-abs": "index.js"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
+    "build": "tsc && shx chmod +x *.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "test": "node --loader ts-node/esm test.ts",

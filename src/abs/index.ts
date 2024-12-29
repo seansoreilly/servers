@@ -22,6 +22,10 @@ import {
   DataflowDetailsSchema,
 } from "./schemas.js";
 
+function log(...args: any[]) {
+  console.error('\x1b[90m', ...args, '\x1b[0m');  // Gray color for logs
+}
+
 const server = new Server(
   {
     name: "abs",
@@ -44,20 +48,26 @@ const ABS_SDMX_API_URL = "https://data.api.abs.gov.au/rest";
 // Helper function to make API requests
 async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> {
   try {
-    console.log('Making request to:', url);
+    log('\n=== API Request ===');
+    log('URL:', url);
     const headers = isSDMX ? {
-      'Accept': 'application/vnd.sdmx.structure+json;version=2.1'
+      'Accept': 'application/vnd.sdmx.structure+json; charset=utf-8; version=1.0'
     } : {
       'Accept': 'application/vnd.sdmx.data+json'
     };
 
-    console.log('Headers:', headers);
+    log('Headers:', JSON.stringify(headers, null, 2));
+    log('=================\n');
 
     const response = await fetch(url, { headers });
 
-    console.log('Response status:', response.status);
+    log('\n=== API Response ===');
+    log('Status:', response.status, response.statusText);
     const text = await response.text();
-    console.log('Response text (first 500 chars):', text.substring(0, 500));
+    log('Response Headers:', JSON.stringify(Object.fromEntries([...response.headers]), null, 2));
+    log('Response Body (truncated):');
+    log(text.substring(0, 1000) + (text.length > 1000 ? '...' : ''));
+    log('===================\n');
 
     if (!response.ok) {
       console.error(`API request failed: ${response.statusText}`);
@@ -68,11 +78,16 @@ async function makeRequest<T>(url: string, isSDMX: boolean = false): Promise<T> 
     try {
       return JSON.parse(text) as T;
     } catch (parseError) {
-      console.error("Failed to parse response as JSON:", parseError, text);
+      console.error('\n=== Parse Error ===');
+      console.error("Failed to parse response as JSON:", parseError);
+      console.error('Full response text:', text);
+      console.error('==================\n');
       throw new Error("Failed to parse response as JSON");
     }
   } catch (error) {
+    console.error('\n=== Request Error ===');
     console.error("Error making request:", error);
+    console.error('===================\n');
     throw error;
   }
 }
@@ -145,17 +160,17 @@ async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
 }
 
 async function getAvailableDataflows(): Promise<DataflowInfo[]> {
-  if (dataflowCache) return dataflowCache;
-
+  if (dataflowCache) return structuredClone(dataflowCache);
   try {
     const response = await getStructureList("dataflow", "ABS");
+    console.log('response', response);
     dataflowCache = await parseDataflowList(response);
-    return dataflowCache;
+    return structuredClone(dataflowCache);
   } catch (err) {
     const error = err as Error;
     console.error("Error getting dataflows:", error);
     return [{
-      id: 'error',
+      id: 'error', 
       name: 'Error fetching dataflows',
       description: error instanceof Error ? error.message : 'Unknown error occurred',
       agency: 'ABS',
