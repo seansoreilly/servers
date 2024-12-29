@@ -15,8 +15,8 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "test": "node --loader ts-node/esm test.ts",
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "npm run build && node index.js",
+    "dev": "nodemon *.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.1",

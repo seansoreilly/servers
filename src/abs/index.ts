@@ -8,10 +8,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import fetch from "node-fetch";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   GetDataSchema,
-  GetStructureListSchema,
+  GetStructureListSchema,  
   GetStructureSchema,
   GetStructureVersionSchema,
   type DataResponse,
@@ -35,32 +34,87 @@ const server = new Server(
   }
 );
 
+// Cache for dataflows
+let dataflowCache: DataflowInfo[] | null = null;
+
 // Base URL for ABS Data API
 const ABS_API_BASE_URL = "https://data.api.abs.gov.au";
 
 // Helper function to make API requests
 async function makeRequest<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+
+    if (!response.ok) {
+      console.error(`API request failed: ${response.statusText}`);
+      console.error(`Response body: ${text}`);
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    // Check if the response is XML
+    if (text.trim().startsWith('<?xml')) {
+      // If we're expecting JSON but got XML, we should convert it
+      // For now, we'll return the XML as a string
+      return {
+        format: 'xml' as const,
+        content: text
+      } as unknown as T;
+    }
+
+    try {
+      return JSON.parse(text) as T;
+    } catch (parseError) {
+      console.error("Failed to parse response as JSON:", parseError);
+      // Return the raw text if JSON parsing fails
+      return {
+        format: 'raw' as const,
+        content: text
+      } as unknown as T;
+    }
+  } catch (error) {
+    console.error("Error making request:", error);
+    throw error;
   }
-  return response.json() as Promise<T>;
 }
 
-// Tool implementations
+// Main API functions
 async function getData(
   dataflowIdentifier: string,
   dataKey: string,
   format: "xml" | "json" | "csv" = "json"
 ): Promise<DataResponse> {
   const url = `${ABS_API_BASE_URL}/rest/data/${dataflowIdentifier}/${dataKey}?format=${format}`;
-  return makeRequest<DataResponse>(url);
+  const response = await makeRequest<DataResponse>(url);
+  
+  // If the response is in XML format and JSON was requested, attempt conversion
+  if (format === 'json' && (response as any).format === 'xml') {
+    // For now, return a structured error response
+    return {
+      header: {
+        id: dataflowIdentifier,
+        test: false,
+        prepared: new Date().toISOString(),
+        sender: {
+          id: 'ABS',
+          name: 'Australian Bureau of Statistics'
+        }
+      },
+      dataSets: [],
+      error: 'Received XML response when JSON was requested. XML parsing not yet implemented.',
+      format: 'xml' as const,
+      content: (response as any).content
+    };
+  }
+  
+  return response;
 }
 
 async function getStructureList(
   structureType: string,
   agencyId: string
 ): Promise<StructureListResponse> {
+  // Explicitly request JSON format
   const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}?format=json`;
   return makeRequest<StructureListResponse>(url);
 }
@@ -70,7 +124,7 @@ async function getStructure(
   agencyId: string,
   structureId: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}`;
+  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}?format=json`;
   return makeRequest<StructureResponse>(url);
 }
 
@@ -80,31 +134,46 @@ async function getStructureVersion(
   structureId: string,
   structureVersion: string
 ): Promise<StructureResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}/${structureVersion}`;
+  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}/${structureId}/${structureVersion}?format=json`;
   return makeRequest<StructureResponse>(url);
 }
 
-let dataflowCache: DataflowInfo[] | null = null;
-
-async function parseDataflowList(response: StructureListResponse): Promise<DataflowInfo[]> {
+async function parseDataflowList(response: any): Promise<DataflowInfo[]> {
   const dataflows: DataflowInfo[] = [];
 
   try {
-    // The response structure has changed to use 'structures' instead of 'data'
+    if (response.format === 'xml') {
+      console.error('Received XML response, parsing not yet implemented');
+      return [{
+        id: 'error',
+        name: 'XML Response - Parsing not implemented',
+        description: 'The ABS API returned XML data. XML parsing will be implemented soon.',
+        agency: 'ABS',
+        version: '1.0'
+      }];
+    }
+
     const structures = response.structures || [];
 
     for (const flow of structures) {
       dataflows.push({
         id: flow.id,
         name: flow.name || flow.id,
-        description: "", // Add description if available in the structure
+        description: "", 
         agency: flow.agency,
         version: flow.version
       });
     }
-  } catch (error) {
+  } catch (err) {
+    const error = err as Error;
     console.error("Error parsing dataflow list:", error);
-    throw new Error("Failed to parse dataflow list");
+    return [{
+      id: 'error',
+      name: 'Error parsing response',
+      description: error instanceof Error ? error.message : 'Unknown error occurred',
+      agency: 'ABS',
+      version: '1.0'
+    }];
   }
 
   return dataflows;
@@ -113,14 +182,25 @@ async function parseDataflowList(response: StructureListResponse): Promise<Dataf
 async function getAvailableDataflows(): Promise<DataflowInfo[]> {
   if (dataflowCache) return dataflowCache;
 
-  const response = await getStructureList("dataflow", "ABS");
-  dataflowCache = await parseDataflowList(response);
-  return dataflowCache;
+  try {
+    const response = await getStructureList("dataflow", "ABS");
+    dataflowCache = await parseDataflowList(response);
+    return dataflowCache;
+  } catch (err) {
+    const error = err as Error;
+    console.error("Error getting dataflows:", error);
+    return [{
+      id: 'error',
+      name: 'Error fetching dataflows',
+      description: error instanceof Error ? error.message : 'Unknown error occurred',
+      agency: 'ABS',
+      version: '1.0'
+    }];
+  }
 }
 
 async function parseDataflowDetails(response: StructureResponse): Promise<DataflowDetails> {
   try {
-    // Add type assertion to help TypeScript understand the structure
     const structure = response.content as any;
 
     if (!structure) {
@@ -164,6 +244,7 @@ async function getDataflowDetails(dataflowId: string): Promise<DataflowDetails> 
   return parseDataflowDetails(structure);
 }
 
+// Tool definitions
 const tools: Tool[] = [
   {
     name: "get_data",
@@ -241,7 +322,7 @@ const tools: Tool[] = [
   }
 ];
 
-// Set up tool handlers
+// Request handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
@@ -319,6 +400,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+// Start the server
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

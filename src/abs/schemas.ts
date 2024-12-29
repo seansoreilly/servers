@@ -50,14 +50,20 @@ export const DataResponseSchema = z.object({
     }),
   }),
   dataSets: z.array(z.record(z.unknown())),
+  error: z.string().optional(),
+  format: z.enum(['json', 'xml', 'raw']).optional(),
+  content: z.string().optional()
 });
 
 export const StructureListResponseSchema = z.object({
   structures: z.array(StructureSchema),
+  format: z.enum(['json', 'xml', 'raw']).optional(),
+  content: z.string().optional()
 });
 
 export const StructureResponseSchema = StructureSchema.extend({
   content: z.record(z.unknown()),
+  format: z.enum(['json', 'xml', 'raw']).optional(),
 });
 
 // Export types
