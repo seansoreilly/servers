@@ -14,16 +14,20 @@
     "build": "tsc && shx chmod +x dist/*.js",
     "prepare": "npm run build",
     "watch": "tsc --watch",
-    "test": "node --loader ts-node/esm test.ts"
+    "test": "node --loader ts-node/esm test.ts",
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.1",
+    "express": "^4.21.2",
     "node-fetch": "^3.3.0",
     "zod": "^3.21.4",
     "zod-to-json-schema": "^3.21.1"
   },
   "devDependencies": {
     "@types/node": "^18.15.11",
+    "nodemon": "^3.1.9",
     "shx": "^0.3.4",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4"

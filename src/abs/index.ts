@@ -61,7 +61,7 @@ async function getStructureList(
   structureType: string,
   agencyId: string
 ): Promise<StructureListResponse> {
-  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}`;
+  const url = `${ABS_API_BASE_URL}/rest/${structureType}/${agencyId}?format=json`;
   return makeRequest<StructureListResponse>(url);
 }
 
