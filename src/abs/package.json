@@ -13,11 +13,13 @@
     "watch": "tsc --watch",
     "test": "node --loader ts-node/esm test.ts",
     "start": "npm run build && node index.js",
-    "dev": "nodemon *.ts"
+    "dev": "nodemon *.ts",
+    "debug": "node --inspect --loader ts-node/esm index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.4",
     "express": "^4.21.2",
+    "node": "^23.5.0",
     "node-fetch": "^3.3.2",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"
