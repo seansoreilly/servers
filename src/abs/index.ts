@@ -9,9 +9,30 @@ import {
 import fetch from "node-fetch";
 import { z } from "zod";
 import { GetDataSchema, type DataflowInfo } from "./schemas.js";
+import { appendFileSync, mkdirSync } from "fs";
+import { join } from "path";
+
+// Create logs directory if it doesn't exist
+const logsDir = join(process.cwd(), 'logs');
+try {
+  mkdirSync(logsDir, { recursive: true });
+} catch (err) {
+  console.error('Failed to create logs directory:', err);
+}
+
+const logFile = join(logsDir, 'abs-api.log');
 
 function log(...args: any[]) {
-  console.error('\x1b[90m', ...args, '\x1b[0m');  // Gray color for logs
+  const timestamp = new Date().toISOString();
+  const message = `[${timestamp}] ${args.map(arg =>
+    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+  ).join(' ')}\n`;
+
+  try {
+    appendFileSync(logFile, message);
+  } catch (err) {
+    console.error('Failed to write to log file:', err);
+  }
 }
 
 const server = new Server(
@@ -96,15 +117,56 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
 }
 
 async function listDataflows(): Promise<DataflowInfo[]> {
-  const url = `${ABS_API_URL}/dataflow/all?detail=allstubs&references=none`;
-  const response = await makeRequest<any>(url, true);
+  const url = `${ABS_API_URL}/dataflow/all?detail=allstubs`;
+  const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
 
-  // Extract and transform the dataflows from the response
-  const structures = response.data?.structures || response.structures || [];
-  return structures.map((flow: any) => ({
-    id: String(flow.id || ''),
-    name: String(flow.names?.[0]?.name || flow.id || '')
-  }));
+  log('\n=== Dataflows Request ===');
+  log('URL:', url);
+  log('Headers:', headers);
+
+  const response = await fetch(url, { headers });
+
+  log('Response Status:', response.status, response.statusText);
+  log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    log('Error Response:', errorText);
+    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
+  }
+
+  const text = await response.text();
+  log('Response Text Length:', text.length);
+
+  if (!text) {
+    throw new Error('Empty response received from API');
+  }
+
+  try {
+    const json = JSON.parse(text);
+    log('Parsed JSON:', json);
+
+    // SDMX JSON structure response format
+    const structures = json.data?.dataflows || [];
+    log('Found Structures:', structures.length);
+
+    const dataflows = structures.map((flow: any) => {
+      // Get name from either the direct name field or from names.en
+      const name = flow.name || flow.names?.en || flow.id || '';
+      return {
+        id: String(flow.id || ''),
+        name: String(name),
+        version: String(flow.version || '1.0.0')
+      };
+    });
+
+    log('Transformed Dataflows:', dataflows);
+    return dataflows;
+  } catch (err) {
+    log('Parse Error:', err);
+    const parseError = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse response as JSON: ${parseError}`);
+  }
 }
 
 // Tool definitions

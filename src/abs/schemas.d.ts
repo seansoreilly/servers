@@ -2,6 +2,7 @@ import { z } from "zod";
 export interface DataflowInfo {
     id: string;
     name: string;
+    version: string;
 }
 export declare const GetDataSchema: z.ZodObject<{
     dataflowIdentifier: z.ZodString;

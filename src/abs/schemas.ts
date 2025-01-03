@@ -3,6 +3,7 @@ import { z } from "zod";
 export interface DataflowInfo {
   id: string;
   name: string;
+  version: string;
 }
 
 export const GetDataSchema = z.object({
