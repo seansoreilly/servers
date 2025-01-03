@@ -30,23 +30,30 @@ const server = new Server(
 const ABS_API_URL = "https://data.api.abs.gov.au/rest";
 
 // Helper function to make API requests
-async function makeRequest<T>(url: string): Promise<T> {
+async function makeRequest<T>(url: string, isDataflow: boolean = false, format?: string): Promise<T> {
   try {
     log('\n=== API Request ===');
     log('URL:', url);
-    
+
     const response = await fetch(url);
-    
+
     log('\n=== API Response ===');
     log('Status:', response.status, response.statusText);
+    log('Content-Type:', response.headers.get('content-type'));
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
     }
 
+    // For CSV formats, return the text directly
+    if (format === 'csvfile' || format === 'csvfilewithlabels') {
+      const text = await response.text();
+      return text as T;
+    }
+
     const text = await response.text();
-    
+
     if (!text) {
       throw new Error('Empty response received from API');
     }
@@ -66,15 +73,32 @@ async function makeRequest<T>(url: string): Promise<T> {
 }
 
 // Main API functions
-async function getData(dataflowIdentifier: string, dataKey?: string): Promise<any> {
-  const url = `${ABS_API_URL}/data/${dataflowIdentifier}${dataKey ? '/' + dataKey : ''}`;
-  return makeRequest(url);
+async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: string = "csvfile"): Promise<any> {
+  // Calculate default time period if not provided
+  if (!startPeriod) {
+    const lastYear = new Date().getFullYear() - 1;
+    startPeriod = lastYear.toString();
+    endPeriod = (lastYear + 1).toString();
+  }
+
+  const params = new URLSearchParams();
+  params.append('startPeriod', startPeriod);
+  if (endPeriod) {
+    params.append('endPeriod', endPeriod);
+  }
+  params.append('format', responseFormat);  // Always include format parameter
+  if (dataKey) {
+    params.append('dataKey', dataKey);
+  }
+
+  const url = `${ABS_API_URL}/data/${dataflowIdentifier}?${params.toString()}`;
+  return makeRequest(url, false, responseFormat);
 }
 
 async function listDataflows(): Promise<DataflowInfo[]> {
   const url = `${ABS_API_URL}/dataflow/all?detail=allstubs&references=none`;
-  const response = await makeRequest<any>(url);
-  
+  const response = await makeRequest<any>(url, true);
+
   // Extract and transform the dataflows from the response
   const structures = response.data?.structures || response.structures || [];
   return structures.map((flow: any) => ({
@@ -91,13 +115,25 @@ const tools: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        dataflowIdentifier: { 
-          type: "string", 
-          description: "The identifier of the dataflow" 
+        dataflowIdentifier: {
+          type: "string",
+          description: "The identifier of the dataflow"
         },
-        dataKey: { 
-          type: "string", 
+        dataKey: {
+          type: "string",
           description: "Optional key parameters (e.g., '1.AUS' for filtering)"
+        },
+        startPeriod: {
+          type: "string",
+          description: "Start period (e.g., '2023')"
+        },
+        endPeriod: {
+          type: "string",
+          description: "End period (e.g., '2024')"
+        },
+        format: {
+          type: "string",
+          description: "requested response data format"
         }
       },
       required: ["dataflowIdentifier"]
@@ -123,7 +159,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (request.params.name) {
       case "get_data": {
         const args = GetDataSchema.parse(request.params.arguments);
-        const data = await getData(args.dataflowIdentifier, args.dataKey);
+        const data = await getData(
+          args.dataflowIdentifier,
+          args.dataKey,
+          args.startPeriod,
+          args.endPeriod,
+          args.responseFormat
+        );
         return { toolResult: data };
       }
 
