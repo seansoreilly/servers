@@ -1,9 +1,4 @@
-Note 2 APIs:
-
-Data API:
-https://api.data.abs.gov.au/data/
-
-SDMX API:
+DATA API:
 https://data.api.abs.gov.au/rest/
 
 # ABS Data API MCP Server
