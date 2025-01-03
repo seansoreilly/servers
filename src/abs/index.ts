@@ -107,13 +107,46 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
   if (endPeriod) {
     params.append('endPeriod', endPeriod);
   }
-  params.append('format', responseFormat);  // Always include format parameter
-  if (dataKey) {
-    params.append('dataKey', dataKey);
+  params.append('format', responseFormat);
+
+  // Construct URL in the same format as the working example
+  const url = `${ABS_API_URL}/data/${dataflowIdentifier}?${params.toString()}`;
+
+  log('\n=== Data Request ===');
+  log('URL:', url);
+  log('Format:', responseFormat);
+
+  const response = await fetch(url);
+
+  log('Response Status:', response.status, response.statusText);
+  log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    log('Error Response:', errorText);
+    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
   }
 
-  const url = `${ABS_API_URL}/data/${dataflowIdentifier}?${params.toString()}`;
-  return makeRequest(url, false, responseFormat);
+  // For CSV formats, return the text directly
+  if (responseFormat === 'csvfile' || responseFormat === 'csvfilewithlabels') {
+    const text = await response.text();
+    log('Response Size:', text.length);
+    return text;
+  }
+
+  // For other formats (like JSON), parse the response
+  const text = await response.text();
+  if (!text) {
+    throw new Error('Empty response received from API');
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    log('Parse Error:', err);
+    const parseError = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse response as JSON: ${parseError}`);
+  }
 }
 
 async function listDataflows(): Promise<DataflowInfo[]> {
