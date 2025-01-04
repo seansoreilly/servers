@@ -109,12 +109,19 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
   }
   params.append('format', responseFormat);
 
-  // Construct URL in the same format as the working example
-  const url = `${ABS_API_URL}/data/${dataflowIdentifier}?${params.toString()}`;
+  // Handle dataKey according to SDMX spec
+  // If no dataKey provided or empty, use "all" to get all data
+  // Otherwise use the provided dataKey which can include:
+  // - Multiple values using + (OR operator)
+  // - Wildcards by omitting values between dots
+  // - Specific dimension values separated by dots
+  const pathKey = dataKey?.trim() || 'all';
+  const url = `${ABS_API_URL}/data/${dataflowIdentifier}/${pathKey}?${params.toString()}`;
 
   log('\n=== Data Request ===');
   log('URL:', url);
   log('Format:', responseFormat);
+  log('DataKey:', pathKey);
 
   const response = await fetch(url);
 
@@ -206,29 +213,30 @@ async function listDataflows(): Promise<DataflowInfo[]> {
 const tools: Tool[] = [
   {
     name: "get_data",
-    description: "Retrieve data from a specific dataflow",
+    description: "Retrieve data from a specific dataflow. Use dataKey to filter the results.",
     inputSchema: {
       type: "object",
       properties: {
         dataflowIdentifier: {
           type: "string",
-          description: "The identifier of the dataflow"
+          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
         },
         dataKey: {
           type: "string",
-          description: "Optional key parameters (e.g., '1.AUS' for filtering)"
+          description: "Filter data using dimension values separated by dots (e.g., '1.AUS' for filtering). Use 'all' for all values, or combine values with + (e.g., '1.115486+131189.10..Q'). Leave empty for all data."
         },
         startPeriod: {
           type: "string",
-          description: "Start period (e.g., '2023')"
+          description: "Start period in format: yyyy, yyyy-Sn (semester), yyyy-Qn (quarter), or yyyy-mm (month)"
         },
         endPeriod: {
           type: "string",
-          description: "End period (e.g., '2024')"
+          description: "End period in format: yyyy, yyyy-Sn (semester), yyyy-Qn (quarter), or yyyy-mm (month)"
         },
         format: {
           type: "string",
-          description: "requested response data format"
+          description: "Response format: csvfile (default), csvfilewithlabels, jsondata, genericdata, or structurespecificdata",
+          enum: ["csvfile", "csvfilewithlabels", "jsondata", "genericdata", "structurespecificdata"]
         }
       },
       required: ["dataflowIdentifier"]

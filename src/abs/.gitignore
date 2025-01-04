@@ -122,6 +122,9 @@ dist
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
+# Don't stage vs code
+.vscode
+
 # yarn v2
 .yarn/cache
 .yarn/unplugged
@@ -302,5 +305,3 @@ cython_debug/
 .js
 
 .map 
-
-
