@@ -194,7 +194,7 @@ async function listDataflows(): Promise<DataflowInfo[]> {
 
 // Add this function with the other API functions
 async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> {
-  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=codelist`;
+  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=all&detail=full`;
   const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
 
   log('\n=== Structure Request ===');
@@ -220,67 +220,14 @@ async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> 
   try {
     const json = JSON.parse(text);
     log('Raw JSON Structure:', json);
-
-    // Get the main structure
-    const dataStructure = json.data?.dataStructures?.[0];
-    if (!dataStructure) {
-      log('No data structure found');
-      return {
-        id: dataflowIdentifier,
-        name: dataflowIdentifier,
-        dimensions: []
-      };
-    }
-
-    // Get dimensions list
-    const dimensions = dataStructure.dataStructureComponents?.dimensionList?.dimensions || [];
-    if (!Array.isArray(dimensions)) {
-      log('No dimensions found');
-      return {
-        id: dataflowIdentifier,
-        name: dataflowIdentifier,
-        dimensions: []
-      };
-    }
-
-    // Get codelists for reference
-    const codelists = json.data?.codelists || [];
-    const codelistMap = new Map();
-    codelists.forEach((codelist: any) => {
-      const codes = codelist.codes || [];
-      codelistMap.set(codelist.id, codes);
-    });
-
-    // Map dimensions with their codes
-    const dimensionInfo = dimensions.map((dim: any) => {
-      const representation = dim.localRepresentation;
-      const codelistRef = representation?.enumeration || representation?.ref;
-      const codelistId = codelistRef?.id || codelistRef;
-      const codes = codelistMap.get(codelistId) || [];
-
-      const values = codes.map((code: any) => ({
-        id: String(code.id || ''),
-        name: String(code.name || code.names?.en || code.id || '')
-      }));
-
-      return {
-        id: String(dim.id || ''),
-        name: String(dim.name || dim.names?.en || dim.id || ''),
-        values
-      };
-    });
-
-    return {
-      id: String(dataStructure.id || dataflowIdentifier),
-      name: String(dataStructure.name || dataStructure.names?.en || dataStructure.id || dataflowIdentifier),
-      dimensions: dimensionInfo
-    };
+    return json;
   } catch (err) {
     log('Parse Error:', err);
     const parseError = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to parse response as JSON: ${parseError}`);
   }
 }
+
 
 // Tool definitions
 const tools: Tool[] = [

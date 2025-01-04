@@ -13,6 +13,11 @@
     "typescript": "^5.0.3"
   },
   "scripts": {
-    "build": "npm run clean && tsc"
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc -w",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "lint": "eslint . --ext .ts",
+    "clean": "rm -rf build"
   }
 }
