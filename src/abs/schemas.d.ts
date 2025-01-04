@@ -32,16 +32,16 @@ export interface CodeInfo {
 }
 export declare const GetDataSchema: z.ZodObject<{
     dataflowIdentifier: z.ZodString;
-    dataKey: z.ZodOptional<z.ZodString>;
-    startPeriod: z.ZodDefault<z.ZodOptional<z.ZodString>>;
-    endPeriod: z.ZodDefault<z.ZodOptional<z.ZodString>>;
+    dataKey: z.ZodDefault<z.ZodOptional<z.ZodString>>;
+    startPeriod: z.ZodOptional<z.ZodString>;
+    endPeriod: z.ZodOptional<z.ZodString>;
     responseFormat: z.ZodDefault<z.ZodEnum<["csvfile", "csvfilewithlabels"]>>;
 }, "strip", z.ZodTypeAny, {
     dataflowIdentifier: string;
-    startPeriod: string;
-    endPeriod: string;
+    dataKey: string;
     responseFormat: "csvfile" | "csvfilewithlabels";
-    dataKey?: string | undefined;
+    startPeriod?: string | undefined;
+    endPeriod?: string | undefined;
 }, {
     dataflowIdentifier: string;
     dataKey?: string | undefined;

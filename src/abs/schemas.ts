@@ -36,10 +36,10 @@ export interface CodeInfo {
 }
 
 export const GetDataSchema = z.object({
-  dataflowIdentifier: z.string().describe("The identifier of the dataflow"),
-  dataKey: z.string().optional().describe("Optional key parameters"),
-  startPeriod: z.string().optional().default("2021").describe("Start period (e.g., '2023')"),
-  endPeriod: z.string().optional().default("2024").describe("End period (e.g., '2024')"),
+  dataflowIdentifier: z.string().min(1).describe("The identifier of the dataflow"),
+  dataKey: z.string().optional().default('all').describe("Optional key parameters"),
+  startPeriod: z.string().optional().describe("Start period (e.g., '2023')"),
+  endPeriod: z.string().optional().describe("End period (e.g., '2024')"),
   responseFormat: z.enum(["csvfile", "csvfilewithlabels"]).default("csvfilewithlabels").describe("CSV format type (csvfilewithlabels for codes and labels, csvfile for codes only)")
 });
 

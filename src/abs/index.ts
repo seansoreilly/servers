@@ -101,42 +101,53 @@ async function makeRequest<T>(url: string, isDataflow: boolean = false, format?:
 }
 
 // Main API functions
-async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" | "csvfilewithlabels" = "csvfilewithlabels"): Promise<string> {
-  const params = new URLSearchParams();
+async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" | "csvfilewithlabels" = "csvfilewithlabels"): Promise<{ data: string }> {
+  try {
+    const params = new URLSearchParams();
 
-  // Use the provided periods or let schema defaults handle it
-  if (startPeriod) {
-    params.append('startPeriod', startPeriod);
+    // Use the provided periods or let schema defaults handle it
+    if (startPeriod) {
+      params.append('startPeriod', startPeriod);
+    }
+    if (endPeriod) {
+      params.append('endPeriod', endPeriod);
+    }
+    params.append('format', responseFormat || 'csvfilewithlabels');
+
+    // Handle dataKey according to SDMX spec
+    const pathKey = dataKey?.trim() || 'all';
+    
+    // Ensure dataflowIdentifier is provided and valid
+    if (!dataflowIdentifier?.trim()) {
+      throw new Error('dataflowIdentifier is required');
+    }
+
+    const url = `${ABS_API_URL}/data/${dataflowIdentifier.trim()}/${pathKey}?${params.toString()}`;
+
+    log('\n=== Data Request ===');
+    log('URL:', url);
+    log('Format:', responseFormat);
+    log('DataKey:', pathKey);
+    log('Periods:', { startPeriod, endPeriod });
+
+    const response = await fetch(url);
+
+    log('Response Status:', response.status, response.statusText);
+    log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      log('Error Response:', errorText);
+      throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
+    }
+
+    const text = await response.text();
+    log('Response Size:', text.length);
+    return { data: text };
+  } catch (error) {
+    log('Error in getData:', error);
+    throw error instanceof Error ? error : new Error(String(error));
   }
-  if (endPeriod) {
-    params.append('endPeriod', endPeriod);
-  }
-  params.append('format', responseFormat);
-
-  // Handle dataKey according to SDMX spec
-  const pathKey = dataKey?.trim() || 'all';
-  const url = `${ABS_API_URL}/data/${dataflowIdentifier}/${pathKey}?${params.toString()}`;
-
-  log('\n=== Data Request ===');
-  log('URL:', url);
-  log('Format:', responseFormat);
-  log('DataKey:', pathKey);
-  log('Periods:', { startPeriod, endPeriod });
-
-  const response = await fetch(url);
-
-  log('Response Status:', response.status, response.statusText);
-  log('Response Headers:', Object.fromEntries(response.headers.entries()));
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    log('Error Response:', errorText);
-    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
-  }
-
-  const text = await response.text();
-  log('Response Size:', text.length);
-  return text;
 }
 
 async function listDataflows(): Promise<DataflowInfo[]> {
@@ -295,7 +306,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (request.params.name) {
       case "get_data": {
+        // Parse with zod schema to ensure type safety
         const args = GetDataSchema.parse(request.params.arguments);
+        
+        // Now args will have the correct types from zod schema
         const data = await getData(
           args.dataflowIdentifier,
           args.dataKey,
