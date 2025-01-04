@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import fetch from "node-fetch";
 import { z } from "zod";
-import { GetDataSchema, type DataflowInfo } from "./schemas.js";
+import { GetDataSchema, GetStructureSchema, type DataflowInfo, type StructureInfo } from "./schemas.js";
 import { appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -39,6 +39,13 @@ const server = new Server(
   {
     name: "abs",
     version: "0.2.0",
+    defaults: {
+      get_data: {
+        startPeriod: "2021",
+        endPeriod: "2024",
+        responseFormat: "csvfilewithlabels"
+      }
+    }
   },
   {
     capabilities: {
@@ -94,27 +101,19 @@ async function makeRequest<T>(url: string, isDataflow: boolean = false, format?:
 }
 
 // Main API functions
-async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: string = "csvfile"): Promise<any> {
-  // Calculate default time period if not provided
-  if (!startPeriod) {
-    const lastYear = new Date().getFullYear() - 1;
-    startPeriod = lastYear.toString();
-    endPeriod = (lastYear + 1).toString();
-  }
-
+async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" | "csvfilewithlabels" = "csvfilewithlabels"): Promise<string> {
   const params = new URLSearchParams();
-  params.append('startPeriod', startPeriod);
+
+  // Use the provided periods or let schema defaults handle it
+  if (startPeriod) {
+    params.append('startPeriod', startPeriod);
+  }
   if (endPeriod) {
     params.append('endPeriod', endPeriod);
   }
   params.append('format', responseFormat);
 
   // Handle dataKey according to SDMX spec
-  // If no dataKey provided or empty, use "all" to get all data
-  // Otherwise use the provided dataKey which can include:
-  // - Multiple values using + (OR operator)
-  // - Wildcards by omitting values between dots
-  // - Specific dimension values separated by dots
   const pathKey = dataKey?.trim() || 'all';
   const url = `${ABS_API_URL}/data/${dataflowIdentifier}/${pathKey}?${params.toString()}`;
 
@@ -122,6 +121,7 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
   log('URL:', url);
   log('Format:', responseFormat);
   log('DataKey:', pathKey);
+  log('Periods:', { startPeriod, endPeriod });
 
   const response = await fetch(url);
 
@@ -134,26 +134,9 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
     throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
   }
 
-  // For CSV formats, return the text directly
-  if (responseFormat === 'csvfile' || responseFormat === 'csvfilewithlabels') {
-    const text = await response.text();
-    log('Response Size:', text.length);
-    return text;
-  }
-
-  // For other formats (like JSON), parse the response
   const text = await response.text();
-  if (!text) {
-    throw new Error('Empty response received from API');
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    log('Parse Error:', err);
-    const parseError = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse response as JSON: ${parseError}`);
-  }
+  log('Response Size:', text.length);
+  return text;
 }
 
 async function listDataflows(): Promise<DataflowInfo[]> {
@@ -209,11 +192,101 @@ async function listDataflows(): Promise<DataflowInfo[]> {
   }
 }
 
+// Add this function with the other API functions
+async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> {
+  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=codelist`;
+  const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
+
+  log('\n=== Structure Request ===');
+  log('URL:', url);
+  log('Headers:', headers);
+
+  const response = await fetch(url, { headers });
+
+  log('Response Status:', response.status, response.statusText);
+  log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    log('Error Response:', errorText);
+    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
+  }
+
+  const text = await response.text();
+  if (!text) {
+    throw new Error('Empty response received from API');
+  }
+
+  try {
+    const json = JSON.parse(text);
+    log('Raw JSON Structure:', json);
+
+    // Get the main structure
+    const dataStructure = json.data?.dataStructures?.[0];
+    if (!dataStructure) {
+      log('No data structure found');
+      return {
+        id: dataflowIdentifier,
+        name: dataflowIdentifier,
+        dimensions: []
+      };
+    }
+
+    // Get dimensions list
+    const dimensions = dataStructure.dataStructureComponents?.dimensionList?.dimensions || [];
+    if (!Array.isArray(dimensions)) {
+      log('No dimensions found');
+      return {
+        id: dataflowIdentifier,
+        name: dataflowIdentifier,
+        dimensions: []
+      };
+    }
+
+    // Get codelists for reference
+    const codelists = json.data?.codelists || [];
+    const codelistMap = new Map();
+    codelists.forEach((codelist: any) => {
+      const codes = codelist.codes || [];
+      codelistMap.set(codelist.id, codes);
+    });
+
+    // Map dimensions with their codes
+    const dimensionInfo = dimensions.map((dim: any) => {
+      const representation = dim.localRepresentation;
+      const codelistRef = representation?.enumeration || representation?.ref;
+      const codelistId = codelistRef?.id || codelistRef;
+      const codes = codelistMap.get(codelistId) || [];
+
+      const values = codes.map((code: any) => ({
+        id: String(code.id || ''),
+        name: String(code.name || code.names?.en || code.id || '')
+      }));
+
+      return {
+        id: String(dim.id || ''),
+        name: String(dim.name || dim.names?.en || dim.id || ''),
+        values
+      };
+    });
+
+    return {
+      id: String(dataStructure.id || dataflowIdentifier),
+      name: String(dataStructure.name || dataStructure.names?.en || dataStructure.id || dataflowIdentifier),
+      dimensions: dimensionInfo
+    };
+  } catch (err) {
+    log('Parse Error:', err);
+    const parseError = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse response as JSON: ${parseError}`);
+  }
+}
+
 // Tool definitions
 const tools: Tool[] = [
   {
     name: "get_data",
-    description: "Retrieve data from a specific dataflow. Use dataKey to filter the results.",
+    description: "Retrieve data from a specific dataflow. Returns data in CSV format with both codes and labels by default.",
     inputSchema: {
       type: "object",
       properties: {
@@ -233,10 +306,11 @@ const tools: Tool[] = [
           type: "string",
           description: "End period in format: yyyy, yyyy-Sn (semester), yyyy-Qn (quarter), or yyyy-mm (month)"
         },
-        format: {
+        responseFormat: {
           type: "string",
-          description: "Response format: csvfile (default), csvfilewithlabels, jsondata, genericdata, or structurespecificdata",
-          enum: ["csvfile", "csvfilewithlabels", "jsondata", "genericdata", "structurespecificdata"]
+          description: "CSV format type: csvfilewithlabels (codes and labels, default) or csvfile (codes only)",
+          enum: ["csvfile", "csvfilewithlabels"],
+          default: "csvfilewithlabels"
         }
       },
       required: ["dataflowIdentifier"]
@@ -248,6 +322,20 @@ const tools: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {}
+    }
+  },
+  {
+    name: "get_structure",
+    description: "Get the structure of a dataflow including all dimensions and their possible values. Use this to discover available filtering options before making data requests.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataflowIdentifier: {
+          type: "string",
+          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
+        }
+      },
+      required: ["dataflowIdentifier"]
     }
   }
 ];
@@ -275,6 +363,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "list_dataflows": {
         const dataflows = await listDataflows();
         return { toolResult: dataflows };
+      }
+
+      case "get_structure": {
+        const args = GetStructureSchema.parse(request.params.arguments);
+        const structure = await getStructure(args.dataflowIdentifier);
+        return { toolResult: structure };
       }
 
       default:

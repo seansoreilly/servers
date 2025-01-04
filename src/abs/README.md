@@ -12,6 +12,60 @@ This MCP server provides access to Australian statistical data including economi
 npm install @mcp/abs-server
 ```
 
+## Usage with MCP Client
+
+### Recommended Configuration
+
+When using this MCP server, configure your client with these recommended defaults:
+
+```json
+{
+  "mcpServers": {
+    "abs": {
+      "defaults": {
+        "get_data": {
+          "startPeriod": "2021",
+          "endPeriod": "2024",
+          "responseFormat": "csvfile"
+        }
+      }
+    }
+  }
+}
+```
+
+These defaults:
+
+- Set a sensible time range for historical data (2021-2024)
+- Use CSV format for easy data processing
+- Can be overridden in individual requests when needed
+
+### Example Client Usage
+
+With defaults configured:
+
+```json
+{
+  "name": "get_data",
+  "arguments": {
+    "dataflowIdentifier": "ABS_ANNUAL_ERP_ASGS2016"
+  }
+}
+```
+
+Overriding defaults:
+
+```json
+{
+  "name": "get_data",
+  "arguments": {
+    "dataflowIdentifier": "ABS_ANNUAL_ERP_ASGS2016",
+    "startPeriod": "2023",
+    "responseFormat": "jsondata"
+  }
+}
+```
+
 ## Tools
 
 ### get_data
