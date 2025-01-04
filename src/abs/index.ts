@@ -228,12 +228,33 @@ async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> 
   }
 }
 
-
 // Tool definitions
 const tools: Tool[] = [
   {
+    name: "list_dataflows",
+    description: "List all available ABS statistical dataflows. Use this first to find available dataflowIdentifiers. Before using get_data, use this to find the dataflowIdentifier and then use get_structure to understand the dimensions and their possible values.",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "get_structure",
+    description: "Before using the get_data tool, get the structure of a dataflow including dimensions and their possible values. Use this before get_data to understand how to filter the data and limit the data returned.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataflowIdentifier: {
+          type: "string",
+          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
+        }
+      },
+      required: ["dataflowIdentifier"]
+    }
+  },
+  {
     name: "get_data",
-    description: "Retrieve data from a specific dataflow. Returns data in CSV format with both codes and labels by default.",
+    description: "After using get_structure to understand the dimensions, use get_data to retrieve filtered data. Returns data in CSV format with both codes and labels by default.",
     inputSchema: {
       type: "object",
       properties: {
@@ -243,7 +264,7 @@ const tools: Tool[] = [
         },
         dataKey: {
           type: "string",
-          description: "Filter data using dimension values separated by dots (e.g., '1.AUS' for filtering). Use 'all' for all values, or combine values with + (e.g., '1.115486+131189.10..Q'). Leave empty for all data."
+          description: "IMPORTANT: Use get_structure first to understand available dimensions. Then filter using dimension values separated by dots (e.g., '1.AUS'). Use 'all' for all values, or combine with + (e.g., '1.115486+131189.10..Q')."
         },
         startPeriod: {
           type: "string",
@@ -258,28 +279,6 @@ const tools: Tool[] = [
           description: "CSV format type: csvfilewithlabels (codes and labels, default) or csvfile (codes only)",
           enum: ["csvfile", "csvfilewithlabels"],
           default: "csvfilewithlabels"
-        }
-      },
-      required: ["dataflowIdentifier"]
-    }
-  },
-  {
-    name: "list_dataflows",
-    description: "List all available ABS statistical dataflows",
-    inputSchema: {
-      type: "object",
-      properties: {}
-    }
-  },
-  {
-    name: "get_structure",
-    description: "Get the structure of a dataflow including all dimensions and their possible values. Use this to discover available filtering options before making data requests.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        dataflowIdentifier: {
-          type: "string",
-          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
         }
       },
       required: ["dataflowIdentifier"]
