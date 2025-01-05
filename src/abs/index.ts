@@ -281,7 +281,11 @@ const tools: Tool[] = [
   },
   {
     name: "get_data",
-    description: "Get data from the ABS API in various formats (CSV, JSON, XML). Returns filtered data based on provided parameters.",
+    description: `Get data from the ABS API in various formats (CSV, JSON, XML).
+      Returns filtered data based on provided parameters.
+      IMPORTANT: Must do get_structure requests 'actualconstraint' and 'codelist' prior to constructing a datakey for a get_data request.
+      actualconstraint: use CR_A_ prepended to the dataflow (eg use CR_A_ABORIGINAL_POP_PROJ for ABORIGINAL_POP_PROJ)
+      `,
     inputSchema: {
       type: "object",
       properties: {
@@ -291,7 +295,7 @@ const tools: Tool[] = [
         },
         dataKey: {
           type: "string",
-          description: "Filter key using dimension values separated by dots (e.g., '1.AUS'). Use 'all' for all values."
+          description: "Filter key using dimension values separated by dots (e.g., '1.AUS')"
         },
         startPeriod: {
           type: "string",

@@ -1,31 +1,43 @@
-Hints:
-An issue with the API is a lot of data being retrieved. You should use strategies to limit the data returned.
-When relevant and allowed by the API, use "allstubs" and "csvfile" to limit the data returned.
-When relevant and allowed by the API, use "Accept:application/vnd.sdmx.structure+json" to return data in JSON format.
-Will sometimes receive "Could not find requested structures" response.  This is OK
-Query the user to narrow down as much as possible what data they want before querying for data.
-Use the most specific dataKey possible.
-Don't send through '0.0' for dataKey.
-For dataKey, you need to determine how many key values are expected to be sent.
+  IMPORTANT:
+    * **Make get_structure requests 'actualconstraint' and 'codelist' prior to constructing a datakey for get_data
+    * **Use `detail`: `allstubs` as a default to limit the amount of data returned, particularly for get_structure {`structureType`: `dataflow`}
 
-datakey:
-  The key to query data returned.  Use get_structure before a using a dataKey for get_data to make sure the you have the correct number of values in the dataKey.
-  Use "all" if you would like to return all data for the dataset.
-  To filter data returned provide a data key, containing one or more coded values for each dimension, separated by a dot (dimensions must be in the order they are defined in the data structure).
-  For example “1.115486.10.50.Q” filters for a single Consumer Price Index series
+* **Optimize Data Retrieval**
+  * **Limit Data Returned:** Use parameters like `allstubs` and `csvfile` when the API supports them.
+  * **Specify Format:** Set the header `Accept: application/vnd.sdmx.structure+json` to receive data in JSON format, if allowed.
 
-  Measure: 1 - Index Number
-  Index: 115486 - Health
-  Adjustment Type: 10 - Original
-  Region: 50 - Weighted average of eight capital cities
-  Frequency: Q - Quarterly
-  Wildcarding is supported by omitting values for the dimension. Eg. data for all regions: “1.115486.10..Q”.
-  The OR operator is supported using the + character. Eg. data for 2 series “1.131188+131189.10.50.Q”.
-  You can combine wildcarding and the OR operator. Eg. “1.131188+131189.10..Q".
+* **Handle API Responses Gracefully**
+  * Receiving a "Could not find requested structures" response is acceptable.
 
-  The maximum allowed length of this parameter is currently 260 characters. Requests that exceed this limit will return a 400 error. We intend to increase this limit soon.
+* **User Interaction**
+  * **Narrow Down Data Requests:** Prompt the user to specify their data needs as precisely as possible before making API queries.
 
-  The dataKey parameter is case sensitive.
+* **Use Specific `dataKey`**
+  * **Avoid Generic Keys:** Do not use `'0.0'\ for `dataKey` dimensions. Use dot as a wildcard.
+  * **Determine Key Requirements:** Use `get_structure` to retrieve the data structure and codelists before `get_data` to ensure the correct number of key values.
+
+* **Constructing `dataKey`**
+  * **Format:** Use coded values for each dimension, separated by dots, in the order defined by the data structure (e.g., `"1.115486.10.50.Q"`).
+    * **Example Breakdown:**
+      * `1` - Measure: Index Number
+      * `115486` - Index: Health
+      * `10` - Adjustment Type: Original
+      * `50` - Region: Weighted average of eight capital cities
+      * `Q` - Frequency: Quarterly
+  * **Wildcarding:** Omit values for dimensions to include all (e.g., `"1.115486.10..Q"` for all regions).
+  * **OR Operator:** Use `+` to include multiple values (e.g., `"1.131188+131189.10.50.Q"` for two series).
+  * **Combine Wildcards and OR:** Example: `"1.131188+131189.10..Q"`.
+  * **Restrictions:**
+    * Maximum `dataKey` length: 260 characters (requests exceeding this will return a 400 error).
+    * `dataKey` is case sensitive.
+
+* **Best Practices**
+  * **Validate Before Querying:** Use `get_structure` to ensure the correct number of values in `dataKey`.
+  * **Be Specific:** Always aim to use the most specific `dataKey` possible to reduce unnecessary data retrieval.
+
+* **Summary**
+  * Follow these guidelines to efficiently interact with the API, retrieve the necessary data, and handle responses appropriately.
+
 
 --------------
 
