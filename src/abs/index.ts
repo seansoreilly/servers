@@ -9,7 +9,7 @@ import {
 import fetch from "node-fetch";
 import { z } from "zod";
 import { GetDataSchema, GetStructureSchema, type DataflowInfo, type StructureInfo } from "./schemas.js";
-import { appendFileSync, mkdirSync } from "fs";
+import { appendFileSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 // Create logs directory if it doesn't exist
@@ -116,7 +116,7 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
 
     // Handle dataKey according to SDMX spec
     const pathKey = dataKey?.trim() || 'all';
-    
+
     // Ensure dataflowIdentifier is provided and valid
     if (!dataflowIdentifier?.trim()) {
       throw new Error('dataflowIdentifier is required');
@@ -205,7 +205,9 @@ async function listDataflows(): Promise<DataflowInfo[]> {
 
 // Add this function with the other API functions
 async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> {
-  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=all&detail=full`;
+  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=none&detail=referencestubs`;
+  // const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=all&detail=allstubs`;
+  // const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?detail=allstubs`;
   const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
 
   log('\n=== Structure Request ===');
@@ -241,6 +243,14 @@ async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> 
 
 // Tool definitions
 const tools: Tool[] = [
+  {
+    name: "list_dataflows_using_stored_file",
+    description: "Returns the raw JSON data from the stored dataflows.json file.  Preferred over list_dataflows",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
   {
     name: "list_dataflows",
     description: "List all available ABS statistical dataflows. Use this first to find available dataflowIdentifiers. Before using get_data, use this to find the dataflowIdentifier and then use get_structure to understand the dimensions and their possible values.",
@@ -305,19 +315,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (request.params.name) {
-      case "get_data": {
-        // Parse with zod schema to ensure type safety
-        const args = GetDataSchema.parse(request.params.arguments);
-        
-        // Now args will have the correct types from zod schema
-        const data = await getData(
-          args.dataflowIdentifier,
-          args.dataKey,
-          args.startPeriod,
-          args.endPeriod,
-          args.responseFormat
-        );
-        return { toolResult: data };
+
+      case "list_dataflows_using_stored_file": {
+        try {
+          const dataflowsPath = 'C:\\projects\\servers\\src\\abs\\dataflows.json';
+          const rawData = readFileSync(dataflowsPath, 'utf8');
+          // return { toolResult: JSON.parse(rawData) };
+          return { toolResult: rawData };
+        } catch (error) {
+          throw new Error(`Failed to read dataflows.json: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
 
       case "list_dataflows": {
@@ -329,6 +336,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = GetStructureSchema.parse(request.params.arguments);
         const structure = await getStructure(args.dataflowIdentifier);
         return { toolResult: structure };
+      }
+
+      case "get_data": {
+        // Parse with zod schema to ensure type safety
+        const args = GetDataSchema.parse(request.params.arguments);
+
+        // Now args will have the correct types from zod schema
+        const data = await getData(
+          args.dataflowIdentifier,
+          args.dataKey,
+          args.startPeriod,
+          args.endPeriod,
+          args.responseFormat
+        );
+        return { toolResult: data };
       }
 
       default:
