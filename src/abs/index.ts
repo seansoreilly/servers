@@ -296,6 +296,7 @@ const tools: Tool[] = [
     name: "get_data",
     description: `Get data from the ABS API in various formats (CSV, JSON, XML).
       Returns filtered data based on provided parameters.
+      Always use {format: 'csvfile'} to reduce the size of the response.
       IMPORTANT: Must do get_metadata request 'actualconstraint' prior to constructing a datakey for a get_data request.
       `,
     inputSchema: {
@@ -445,7 +446,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             startPeriod: args.startPeriod,
             endPeriod: args.endPeriod,
-            format: args.format,
+            // format: args.format,
+            format: 'csvfile',
             detail: args.detail,
             dimensionAtObservation: args.dimensionAtObservation
           }
@@ -496,6 +498,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             references: args.references
           }
         );
+
+        console.log(structure);
+        if (structure === "Could not find requested structures") {
+          return { toolResult: "No data exists" };
+        }
         return { toolResult: structure };
       }
 

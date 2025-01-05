@@ -44,9 +44,9 @@ export declare const GetDataSchema: z.ZodObject<{
     endPeriod?: string | undefined;
 }, {
     dataflowIdentifier: string;
-    dataKey?: string | undefined;
     startPeriod?: string | undefined;
     endPeriod?: string | undefined;
+    dataKey?: string | undefined;
     responseFormat?: "csvfile" | undefined;
 }>;
 export declare const GetStructureSchema: z.ZodObject<{
