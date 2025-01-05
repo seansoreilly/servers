@@ -269,6 +269,19 @@ const GetStructureSchema = z.object({
   ]).optional()
 });
 
+const GetMetadataSchema = z.object({
+  dataflowId: z.string(),
+  metadataType: z.enum(['actualconstraint']) as z.ZodEnum<['actualconstraint']>,
+  detail: z.enum([
+    'full', 'allstubs', 'referencestubs', 'referencepartial',
+    'allcompletestubs', 'referencecompletestubs'
+  ]).optional(),
+  references: z.enum([
+    'none', 'parents', 'parentsandsiblings', 'children',
+    'descendants', 'all'
+  ]).optional()
+});
+
 // Tool definitions
 const tools: Tool[] = [
   {
@@ -283,8 +296,7 @@ const tools: Tool[] = [
     name: "get_data",
     description: `Get data from the ABS API in various formats (CSV, JSON, XML).
       Returns filtered data based on provided parameters.
-      IMPORTANT: Must do get_structure requests 'actualconstraint' and 'codelist' prior to constructing a datakey for a get_data request.
-      actualconstraint: use CR_A_ prepended to the dataflow (eg use CR_A_ABORIGINAL_POP_PROJ for ABORIGINAL_POP_PROJ)
+      IMPORTANT: Must do get_metadata request 'actualconstraint' prior to constructing a datakey for a get_data request.
       `,
     inputSchema: {
       type: "object",
@@ -369,6 +381,41 @@ const tools: Tool[] = [
       },
       required: ["structureType"]
     }
+  },
+  {
+    name: "get_metadata",
+    description: "Get actualconstraint metadata for a given dataflow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataflowId: {
+          type: "string",
+          description: "The dataflow ID to get metadata for (e.g., 'ABORIGINAL_POP_PROJ'). 'CR_A_' will be automatically prepended."
+        },
+        metadataType: {
+          type: "string",
+          enum: ["actualconstraint"],
+          description: "Type of metadata to retrieve. Currently only supports actualconstraint."
+        },
+        detail: {
+          type: "string",
+          enum: [
+            "full", "allstubs", "referencestubs", "referencepartial",
+            "allcompletestubs", "referencecompletestubs"
+          ],
+          description: "Level of detail in the response"
+        },
+        references: {
+          type: "string",
+          enum: [
+            "none", "parents", "parentsandsiblings", "children",
+            "descendants", "all"
+          ],
+          description: "References to include in the response"
+        }
+      },
+      required: ["dataflowId", "metadataType"]
+    }
   }
 ];
 
@@ -431,6 +478,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
           return { toolResult: structures };
         }
+      }
+
+      case "get_metadata": {
+        const args = GetMetadataSchema.parse(request.params.arguments);
+
+        // Prepend CR_A_ to the dataflowId
+        const structureId = `CR_A_${args.dataflowId}`;
+
+        const structure = await apiClient.getStructure(
+          args.metadataType as StructureType,
+          API_CONFIG.defaultAgency,
+          structureId,
+          undefined,
+          {
+            detail: args.detail,
+            references: args.references
+          }
+        );
+        return { toolResult: structure };
       }
 
       default:
