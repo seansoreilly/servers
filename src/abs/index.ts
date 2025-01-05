@@ -8,7 +8,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import fetch from "node-fetch";
 import { z } from "zod";
-import { GetDataSchema, GetStructureSchema, type DataflowInfo, type StructureInfo } from "./schemas.js";
 import { appendFileSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -35,10 +34,193 @@ function log(...args: any[]) {
   }
 }
 
+// API Configuration
+const API_CONFIG = {
+  baseUrl: "https://data.api.abs.gov.au/rest",
+  defaultAgency: "ABS",
+  version: "0.2.0",
+  name: "abs",
+};
+
+// Response Format Types
+type ResponseFormat =
+  | "csvfilewithlabels"
+  | "csvfile"
+  | "jsondata"
+  | "genericdata"
+  | "structurespecificdata";
+
+// Structure Types
+type StructureType =
+  | "dataflow"
+  | "datastructure"
+  | "codelist"
+  | "conceptscheme"
+  | "categoryscheme"
+  | "contentconstraint"
+  | "actualconstraint"
+  | "agencyscheme"
+  | "categorisation"
+  | "hierarchicalcodelist";
+
+// Detail Level Types
+type DetailLevel =
+  | "full"
+  | "allstubs"
+  | "referencestubs"
+  | "referencepartial"
+  | "allcompletestubs"
+  | "referencecompletestubs";
+
+// References Types
+type ReferenceType =
+  | "none"
+  | "parents"
+  | "parentsandsiblings"
+  | "children"
+  | "descendants"
+  | "all"
+  | StructureType;
+
+// API Client Class
+class ABSApiClient {
+  private readonly baseUrl: string;
+
+  constructor(baseUrl: string = API_CONFIG.baseUrl) {
+    this.baseUrl = baseUrl;
+  }
+
+  private async makeRequest<T>(
+    url: string,
+    acceptHeader?: string,
+    params: Record<string, string | undefined> = {}
+  ): Promise<T> {
+    try {
+      const queryParams = new URLSearchParams(
+        Object.entries(params).filter(([_, v]) => v != null).map(([k, v]) => [k, v as string])
+      );
+      const fullUrl = `${url}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+      log('\n=== API Request ===');
+      log('URL:', fullUrl);
+      log('Accept:', acceptHeader);
+
+      const headers: Record<string, string> = {};
+      if (acceptHeader) {
+        headers['Accept'] = acceptHeader;
+      }
+
+      const response = await fetch(fullUrl, { headers });
+
+      log('\n=== API Response ===');
+      log('Status:', response.status, response.statusText);
+      log('Content-Type:', response.headers.get('content-type'));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('csv')) {
+        return response.text() as T;
+      }
+
+      const text = await response.text();
+      return contentType?.includes('json') ? JSON.parse(text) : text as T;
+    } catch (error) {
+      log('\n=== Request Error ===');
+      log("Error making request:", error);
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  // Data Endpoints
+  async getData(
+    dataflowIdentifier: string,
+    dataKey: string = "all",
+    options: {
+      startPeriod?: string;
+      endPeriod?: string;
+      format?: ResponseFormat;
+      detail?: "full" | "dataonly" | "serieskeysonly" | "nodata";
+      dimensionAtObservation?: string;
+    } = {}
+  ) {
+    const acceptHeaders = {
+      jsondata: 'application/vnd.sdmx.data+json',
+      genericdata: 'application/vnd.sdmx.genericdata+xml',
+      structurespecificdata: 'application/vnd.sdmx.structurespecificdata+xml',
+      csvfile: 'application/vnd.sdmx.data+csv',
+      csvfilewithlabels: 'application/vnd.sdmx.data+csv;labels=both'
+    };
+
+    const url = `${this.baseUrl}/data/${dataflowIdentifier}/${dataKey}`;
+    const format = options.format || 'csvfile';
+
+    return this.makeRequest(
+      url,
+      acceptHeaders[format],
+      {
+        startPeriod: options.startPeriod,
+        endPeriod: options.endPeriod,
+        format: options.format,
+        detail: options.detail,
+        dimensionAtObservation: options.dimensionAtObservation
+      }
+    );
+  }
+
+  // Metadata Endpoints
+  async getStructures(
+    structureType: StructureType,
+    agencyId: string = API_CONFIG.defaultAgency,
+    options: {
+      detail?: DetailLevel;
+      references?: ReferenceType;
+    } = {}
+  ) {
+    const url = `${this.baseUrl}/${structureType}/${agencyId}`;
+    return this.makeRequest(
+      url,
+      'application/vnd.sdmx.structure+json',
+      {
+        detail: options.detail,
+        references: options.references
+      }
+    );
+  }
+
+  async getStructure(
+    structureType: StructureType,
+    agencyId: string = API_CONFIG.defaultAgency,
+    structureId: string,
+    version?: string,
+    options: {
+      detail?: DetailLevel;
+      references?: ReferenceType;
+    } = {}
+  ) {
+    const url = `${this.baseUrl}/${structureType}/${agencyId}/${structureId}${version ? '/' + version : ''}`;
+    return this.makeRequest(
+      url,
+      'application/vnd.sdmx.structure+json',
+      {
+        detail: options.detail,
+        references: options.references
+      }
+    );
+  }
+}
+
+// Initialize API client
+const apiClient = new ABSApiClient();
+
+// Server setup
 const server = new Server(
   {
-    name: "abs",
-    version: "0.2.0",
+    name: API_CONFIG.name,
+    version: API_CONFIG.version,
     defaults: {
       get_data: {
         startPeriod: "2021",
@@ -54,238 +236,62 @@ const server = new Server(
   }
 );
 
-// Base URL for ABS API
-const ABS_API_URL = "https://data.api.abs.gov.au/rest";
+// Tool Schemas
+const GetDataSchema = z.object({
+  dataflowIdentifier: z.string(),
+  dataKey: z.string().optional(),
+  startPeriod: z.string().optional(),
+  endPeriod: z.string().optional(),
+  format: z.enum(['csvfilewithlabels', 'csvfile', 'jsondata', 'genericdata', 'structurespecificdata']).optional(),
+  detail: z.enum(['full', 'dataonly', 'serieskeysonly', 'nodata']).optional(),
+  dimensionAtObservation: z.string().optional()
+});
 
-// Helper function to make API requests
-async function makeRequest<T>(url: string, isDataflow: boolean = false, format?: "csvfile"): Promise<T> {
-  try {
-    log('\n=== API Request ===');
-    log('URL:', url);
-
-    const response = await fetch(url);
-
-    log('\n=== API Response ===');
-    log('Status:', response.status, response.statusText);
-    log('Content-Type:', response.headers.get('content-type'));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
-    }
-
-    // For CSV formats, return the text directly
-    if (format === 'csvfile') {
-      const text = await response.text();
-      return text as T;
-    }
-
-    const text = await response.text();
-
-    if (!text) {
-      throw new Error('Empty response received from API');
-    }
-
-    try {
-      return JSON.parse(text) as T;
-    } catch (err) {
-      log('Parse Error:', err);
-      const parseError = err instanceof Error ? err.message : String(err);
-      throw new Error(`Failed to parse response as JSON: ${parseError}`);
-    }
-  } catch (error) {
-    log('\n=== Request Error ===');
-    log("Error making request:", error);
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-}
-
-// Main API functions
-async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" = "csvfile"): Promise<{ data: string }> {
-  try {
-    const params = new URLSearchParams();
-
-    // Use the provided periods or let schema defaults handle it
-    if (startPeriod) {
-      params.append('startPeriod', startPeriod);
-    }
-    if (endPeriod) {
-      params.append('endPeriod', endPeriod);
-    }
-    params.append('format', responseFormat || 'csvfile');
-
-    // Handle dataKey according to SDMX spec
-    const pathKey = dataKey?.trim() || 'all';
-
-    // Ensure dataflowIdentifier is provided and valid
-    if (!dataflowIdentifier?.trim()) {
-      throw new Error('dataflowIdentifier is required');
-    }
-
-    const url = `${ABS_API_URL}/data/${dataflowIdentifier.trim()}/${pathKey}?${params.toString()}`;
-
-    log('\n=== Data Request ===');
-    log('URL:', url);
-    log('Format:', responseFormat);
-    log('DataKey:', pathKey);
-    log('Periods:', { startPeriod, endPeriod });
-
-    const response = await fetch(url);
-
-    log('Response Status:', response.status, response.statusText);
-    log('Response Headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      log('Error Response:', errorText);
-      throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
-    }
-
-    const text = await response.text();
-    log('Response Size:', text.length);
-    return { data: text };
-  } catch (error) {
-    log('Error in getData:', error);
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-}
-
-async function listDataflows(): Promise<DataflowInfo[]> {
-  const url = `${ABS_API_URL}/dataflow/all?detail=allstubs`;
-  const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
-
-  log('\n=== Dataflows Request ===');
-  log('URL:', url);
-  log('Headers:', headers);
-
-  const response = await fetch(url, { headers });
-
-  log('Response Status:', response.status, response.statusText);
-  log('Response Headers:', Object.fromEntries(response.headers.entries()));
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    log('Error Response:', errorText);
-    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
-  }
-
-  const text = await response.text();
-  log('Response Text Length:', text.length);
-
-  if (!text) {
-    throw new Error('Empty response received from API');
-  }
-
-  try {
-    const json = JSON.parse(text);
-    log('Parsed JSON:', json);
-
-    // SDMX JSON structure response format
-    const structures = json.data?.dataflows || [];
-    log('Found Structures:', structures.length);
-
-    const dataflows = structures.map((flow: any) => {
-      // Get name from either the direct name field or from names.en
-      const name = flow.name || flow.names?.en || flow.id || '';
-      return {
-        id: String(flow.id || ''),
-        name: String(name),
-        version: String(flow.version || '1.0.0')
-      };
-    });
-
-    log('Transformed Dataflows:', dataflows);
-    return dataflows;
-  } catch (err) {
-    log('Parse Error:', err);
-    const parseError = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse response as JSON: ${parseError}`);
-  }
-}
-
-// Add this function with the other API functions
-async function getStructure(dataflowIdentifier: string): Promise<StructureInfo> {
-  const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=none&detail=referencestubs`;
-  // const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?references=all&detail=allstubs`;
-  // const url = `${ABS_API_URL}/datastructure/ABS/${dataflowIdentifier}?detail=allstubs`;
-  const headers = { 'Accept': 'application/vnd.sdmx.structure+json' };
-
-  log('\n=== Structure Request ===');
-  log('URL:', url);
-  log('Headers:', headers);
-
-  const response = await fetch(url, { headers });
-
-  log('Response Status:', response.status, response.statusText);
-  log('Response Headers:', Object.fromEntries(response.headers.entries()));
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    log('Error Response:', errorText);
-    throw new Error(`API request failed (${response.status}): ${response.statusText}\n${errorText}`);
-  }
-
-  const text = await response.text();
-  if (!text) {
-    throw new Error('Empty response received from API');
-  }
-
-  try {
-    const json = JSON.parse(text);
-    log('Raw JSON Structure:', json);
-    return json;
-  } catch (err) {
-    log('Parse Error:', err);
-    const parseError = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse response as JSON: ${parseError}`);
-  }
-}
+const GetStructureSchema = z.object({
+  structureType: z.enum([
+    'dataflow', 'datastructure', 'codelist', 'conceptscheme', 'categoryscheme',
+    'contentconstraint', 'actualconstraint', 'agencyscheme', 'categorisation',
+    'hierarchicalcodelist'
+  ]),
+  agencyId: z.string().optional(),
+  structureId: z.string().optional(),
+  version: z.string().optional(),
+  detail: z.enum([
+    'full', 'allstubs', 'referencestubs', 'referencepartial',
+    'allcompletestubs', 'referencecompletestubs'
+  ]).optional(),
+  references: z.enum([
+    'none', 'parents', 'parentsandsiblings', 'children',
+    'descendants', 'all', 'datastructure', 'dataflow', 'codelist',
+    'conceptscheme', 'categoryscheme', 'contentconstraint',
+    'actualconstraint', 'agencyscheme', 'categorisation',
+    'hierarchicalcodelist'
+  ]).optional()
+});
 
 // Tool definitions
 const tools: Tool[] = [
   {
-    name: "list_dataflows_using_stored_file",
-    description: "Returns the raw JSON data from the stored dataflows.json file.  Preferred over list_dataflows",
+    name: "api_specification",
+    description: "ALWAYS DO THIS FIRST. Returns the raw OpenAPI/Swagger specification for the ABS Data API.",
     inputSchema: {
       type: "object",
       properties: {}
-    }
-  },
-  {
-    name: "list_dataflows",
-    description: "List all available ABS statistical dataflows. Use this first to find available dataflowIdentifiers. Before using get_data, use this to find the dataflowIdentifier and then use get_structure to understand the dimensions and their possible values.",
-    inputSchema: {
-      type: "object",
-      properties: {}
-    }
-  },
-  {
-    name: "get_structure",
-    description: "Before using the get_data tool, get the structure of a dataflow including dimensions and their possible values. Use this before get_data to understand how to filter the data and limit the data returned.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        dataflowIdentifier: {
-          type: "string",
-          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
-        }
-      },
-      required: ["dataflowIdentifier"]
     }
   },
   {
     name: "get_data",
-    description: "After using get_structure to understand the dimensions, use get_data to retrieve filtered data. Returns data in CSV format with codes only.",
+    description: "Get data from the ABS API in various formats (CSV, JSON, XML). Returns filtered data based on provided parameters.",
     inputSchema: {
       type: "object",
       properties: {
         dataflowIdentifier: {
           type: "string",
-          description: "The identifier of the dataflow (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
+          description: "The dataflow identifier (e.g., 'ABS_ANNUAL_ERP_ASGS2016')"
         },
         dataKey: {
           type: "string",
-          description: "IMPORTANT: Use get_structure first to understand available dimensions. Then filter using dimension values separated by dots (e.g., '1.AUS'). Use 'all' for all values, or combine with + (e.g., '1.115486+131189.10..Q')."
+          description: "Filter key using dimension values separated by dots (e.g., '1.AUS'). Use 'all' for all values."
         },
         startPeriod: {
           type: "string",
@@ -295,14 +301,69 @@ const tools: Tool[] = [
           type: "string",
           description: "End period in format: yyyy, yyyy-Sn (semester), yyyy-Qn (quarter), or yyyy-mm (month)"
         },
-        responseFormat: {
+        format: {
           type: "string",
-          description: "CSV format type: codes only",
-          enum: ["csvfile"],
-          default: "csvfile"
+          enum: ["csvfilewithlabels", "csvfile", "jsondata", "genericdata", "structurespecificdata"],
+          description: "Response format type"
+        },
+        detail: {
+          type: "string",
+          enum: ["full", "dataonly", "serieskeysonly", "nodata"],
+          description: "Level of detail in the response"
+        },
+        dimensionAtObservation: {
+          type: "string",
+          description: "Dimension to use at observation level"
         }
       },
       required: ["dataflowIdentifier"]
+    }
+  },
+  {
+    name: "get_structure",
+    description: "Get metadata structures from the ABS API including dataflows, codelists, and concepts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        structureType: {
+          type: "string",
+          enum: [
+            "dataflow", "datastructure", "codelist", "conceptscheme",
+            "categoryscheme", "contentconstraint", "actualconstraint",
+            "agencyscheme", "categorisation", "hierarchicalcodelist"
+          ],
+          description: "Type of structure to retrieve"
+        },
+        agencyId: {
+          type: "string",
+          description: "Agency ID (defaults to ABS)"
+        },
+        structureId: {
+          type: "string",
+          description: "Structure ID"
+        },
+        version: {
+          type: "string",
+          description: "Version of the structure"
+        },
+        detail: {
+          type: "string",
+          enum: [
+            "full", "allstubs", "referencestubs", "referencepartial",
+            "allcompletestubs", "referencecompletestubs"
+          ],
+          description: "Level of detail in the response"
+        },
+        references: {
+          type: "string",
+          enum: [
+            "none", "parents", "parentsandsiblings", "children",
+            "descendants", "all"
+          ],
+          description: "References to include in the response"
+        }
+      },
+      required: ["structureType"]
     }
   }
 ];
@@ -315,42 +376,57 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (request.params.name) {
-
-      case "list_dataflows_using_stored_file": {
+      case "api_specification": {
         try {
-          const dataflowsPath = 'C:\\projects\\servers\\src\\abs\\dataflows.json';
-          const rawData = readFileSync(dataflowsPath, 'utf8');
-          // return { toolResult: JSON.parse(rawData) };
+          const specPath = 'C:\\projects\\servers\\src\\abs\\DataAPI.openapi.yaml.txt';
+          const rawData = readFileSync(specPath, 'utf8');
           return { toolResult: rawData };
         } catch (error) {
-          throw new Error(`Failed to read dataflows.json: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`Failed to read API specification: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
-      case "list_dataflows": {
-        const dataflows = await listDataflows();
-        return { toolResult: dataflows };
+      case "get_data": {
+        const args = GetDataSchema.parse(request.params.arguments);
+        const data = await apiClient.getData(
+          args.dataflowIdentifier,
+          args.dataKey,
+          {
+            startPeriod: args.startPeriod,
+            endPeriod: args.endPeriod,
+            format: args.format,
+            detail: args.detail,
+            dimensionAtObservation: args.dimensionAtObservation
+          }
+        );
+        return { toolResult: data };
       }
 
       case "get_structure": {
         const args = GetStructureSchema.parse(request.params.arguments);
-        const structure = await getStructure(args.dataflowIdentifier);
-        return { toolResult: structure };
-      }
-
-      case "get_data": {
-        // Parse with zod schema to ensure type safety
-        const args = GetDataSchema.parse(request.params.arguments);
-
-        // Now args will have the correct types from zod schema
-        const data = await getData(
-          args.dataflowIdentifier,
-          args.dataKey,
-          args.startPeriod,
-          args.endPeriod,
-          args.responseFormat
-        );
-        return { toolResult: data };
+        if (args.structureId) {
+          const structure = await apiClient.getStructure(
+            args.structureType,
+            args.agencyId,
+            args.structureId,
+            args.version,
+            {
+              detail: args.detail,
+              references: args.references
+            }
+          );
+          return { toolResult: structure };
+        } else {
+          const structures = await apiClient.getStructures(
+            args.structureType,
+            args.agencyId,
+            {
+              detail: args.detail,
+              references: args.references
+            }
+          );
+          return { toolResult: structures };
+        }
       }
 
       default:
