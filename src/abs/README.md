@@ -96,8 +96,7 @@ Retrieves data from a specific ABS dataflow.
 
 **Response Formats:**
 
-- `csvfile` (default): CSV with dimension codes
-- `csvfilewithlabels`: CSV with dimension codes and labels
+- `csvfile`: CSV with dimension codes
 - `jsondata`: SDMX JSON format
 - `genericdata`: SDMX XML generic format
 - `structurespecificdata`: SDMX XML structure-specific format

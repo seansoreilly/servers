@@ -35,11 +35,11 @@ export declare const GetDataSchema: z.ZodObject<{
     dataKey: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     startPeriod: z.ZodOptional<z.ZodString>;
     endPeriod: z.ZodOptional<z.ZodString>;
-    responseFormat: z.ZodDefault<z.ZodEnum<["csvfile", "csvfilewithlabels"]>>;
+    responseFormat: z.ZodDefault<z.ZodEnum<["csvfile"]>>;
 }, "strip", z.ZodTypeAny, {
     dataflowIdentifier: string;
     dataKey: string;
-    responseFormat: "csvfile" | "csvfilewithlabels";
+    responseFormat: "csvfile";
     startPeriod?: string | undefined;
     endPeriod?: string | undefined;
 }, {
@@ -47,7 +47,7 @@ export declare const GetDataSchema: z.ZodObject<{
     dataKey?: string | undefined;
     startPeriod?: string | undefined;
     endPeriod?: string | undefined;
-    responseFormat?: "csvfile" | "csvfilewithlabels" | undefined;
+    responseFormat?: "csvfile" | undefined;
 }>;
 export declare const GetStructureSchema: z.ZodObject<{
     dataflowIdentifier: z.ZodString;

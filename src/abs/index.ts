@@ -43,7 +43,7 @@ const server = new Server(
       get_data: {
         startPeriod: "2021",
         endPeriod: "2024",
-        responseFormat: "csvfilewithlabels"
+        responseFormat: "csvfile"
       }
     }
   },
@@ -58,7 +58,7 @@ const server = new Server(
 const ABS_API_URL = "https://data.api.abs.gov.au/rest";
 
 // Helper function to make API requests
-async function makeRequest<T>(url: string, isDataflow: boolean = false, format?: string): Promise<T> {
+async function makeRequest<T>(url: string, isDataflow: boolean = false, format?: "csvfile"): Promise<T> {
   try {
     log('\n=== API Request ===');
     log('URL:', url);
@@ -75,7 +75,7 @@ async function makeRequest<T>(url: string, isDataflow: boolean = false, format?:
     }
 
     // For CSV formats, return the text directly
-    if (format === 'csvfile' || format === 'csvfilewithlabels') {
+    if (format === 'csvfile') {
       const text = await response.text();
       return text as T;
     }
@@ -101,7 +101,7 @@ async function makeRequest<T>(url: string, isDataflow: boolean = false, format?:
 }
 
 // Main API functions
-async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" | "csvfilewithlabels" = "csvfilewithlabels"): Promise<{ data: string }> {
+async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod?: string, endPeriod?: string, responseFormat: "csvfile" = "csvfile"): Promise<{ data: string }> {
   try {
     const params = new URLSearchParams();
 
@@ -112,7 +112,7 @@ async function getData(dataflowIdentifier: string, dataKey?: string, startPeriod
     if (endPeriod) {
       params.append('endPeriod', endPeriod);
     }
-    params.append('format', responseFormat || 'csvfilewithlabels');
+    params.append('format', responseFormat || 'csvfile');
 
     // Handle dataKey according to SDMX spec
     const pathKey = dataKey?.trim() || 'all';
@@ -275,7 +275,7 @@ const tools: Tool[] = [
   },
   {
     name: "get_data",
-    description: "After using get_structure to understand the dimensions, use get_data to retrieve filtered data. Returns data in CSV format with both codes and labels by default.",
+    description: "After using get_structure to understand the dimensions, use get_data to retrieve filtered data. Returns data in CSV format with codes only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -297,9 +297,9 @@ const tools: Tool[] = [
         },
         responseFormat: {
           type: "string",
-          description: "CSV format type: csvfilewithlabels (codes and labels, default) or csvfile (codes only)",
-          enum: ["csvfile", "csvfilewithlabels"],
-          default: "csvfilewithlabels"
+          description: "CSV format type: codes only",
+          enum: ["csvfile"],
+          default: "csvfile"
         }
       },
       required: ["dataflowIdentifier"]

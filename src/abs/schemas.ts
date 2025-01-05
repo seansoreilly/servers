@@ -40,7 +40,7 @@ export const GetDataSchema = z.object({
   dataKey: z.string().optional().default('all').describe("Optional key parameters"),
   startPeriod: z.string().optional().describe("Start period (e.g., '2023')"),
   endPeriod: z.string().optional().describe("End period (e.g., '2024')"),
-  responseFormat: z.enum(["csvfile", "csvfilewithlabels"]).default("csvfilewithlabels").describe("CSV format type (csvfilewithlabels for codes and labels, csvfile for codes only)")
+  responseFormat: z.enum(["csvfile"]).default("csvfile").describe("CSV format type (codes only)")
 });
 
 export const GetStructureSchema = z.object({
