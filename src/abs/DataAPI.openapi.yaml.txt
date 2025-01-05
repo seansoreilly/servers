@@ -6,6 +6,26 @@ Will sometimes receive "Could not find requested structures" response.  This is 
 Query the user to narrow down as much as possible what data they want before querying for data.
 Use the most specific dataKey possible.
 Don't send through '0.0' for dataKey.
+For dataKey, you need to determine how many key values are expected to be sent.
+
+datakey:
+  The key to query data returned.  Use get_structure before a using a dataKey for get_data to make sure the you have the correct number of values in the dataKey.
+  Use "all" if you would like to return all data for the dataset.
+  To filter data returned provide a data key, containing one or more coded values for each dimension, separated by a dot (dimensions must be in the order they are defined in the data structure).
+  For example “1.115486.10.50.Q” filters for a single Consumer Price Index series
+
+  Measure: 1 - Index Number
+  Index: 115486 - Health
+  Adjustment Type: 10 - Original
+  Region: 50 - Weighted average of eight capital cities
+  Frequency: Q - Quarterly
+  Wildcarding is supported by omitting values for the dimension. Eg. data for all regions: “1.115486.10..Q”.
+  The OR operator is supported using the + character. Eg. data for 2 series “1.131188+131189.10.50.Q”.
+  You can combine wildcarding and the OR operator. Eg. “1.131188+131189.10..Q".
+
+  The maximum allowed length of this parameter is currently 260 characters. Requests that exceed this limit will return a 400 error. We intend to increase this limit soon.
+
+  The dataKey parameter is case sensitive.
 
 --------------
 
