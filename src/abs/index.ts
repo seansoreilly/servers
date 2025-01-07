@@ -82,6 +82,57 @@ type ReferenceType =
   | "all"
   | StructureType;
 
+// Add these types for better structure
+type Dimension = {
+  id: string;
+  name: string;
+  position: number;
+  type: 'Dimension' | 'TimeDimension';
+  conceptIdentity?: {
+    id: string;
+    name?: string;
+  };
+  representation?: {
+    enumeration?: string[];
+  };
+};
+
+// Add structure response types
+interface StructureResponse {
+  data: {
+    dataStructures: Array<{
+      dataStructureComponents: {
+        dimensionList?: {
+          dimensions: Array<{
+            id: string;
+            name?: string;
+            position: number;
+            conceptIdentity?: {
+              id: string;
+              name?: string;
+            };
+            representation?: {
+              enumeration?: string[];
+            };
+          }>;
+        };
+        timeDimensions?: Array<{
+          id: string;
+          name?: string;
+          position: number;
+          conceptIdentity?: {
+            id: string;
+            name?: string;
+          };
+          representation?: {
+            enumeration?: string[];
+          };
+        }>;
+      };
+    }>;
+  };
+}
+
 // API Client Class
 class ABSApiClient {
   private readonly baseUrl: string;
@@ -211,6 +262,66 @@ class ABSApiClient {
       }
     );
   }
+
+  async getDimensionList(dataflowId: string): Promise<{
+    dimensions: Dimension[];
+    timeDimensions: Dimension[];
+  }> {
+    try {
+      // Get the datastructure for the given dataflow
+      const structure = await this.getStructure(
+        'datastructure',
+        API_CONFIG.defaultAgency,
+        dataflowId,
+        undefined,
+        {
+          detail: 'full',
+          references: 'none'
+        }
+      ) as StructureResponse;
+
+      if (!structure?.data?.dataStructures?.[0]?.dataStructureComponents) {
+        throw new Error('Invalid datastructure response');
+      }
+
+      const components = structure.data.dataStructures[0].dataStructureComponents;
+
+      // Extract regular dimensions
+      const dimensions: Dimension[] = (components.dimensionList?.dimensions || [])
+        .map(dim => ({
+          id: dim.id,
+          name: dim.name || dim.id,
+          position: dim.position,
+          type: 'Dimension' as const,
+          conceptIdentity: dim.conceptIdentity,
+          representation: dim.representation
+        }));
+
+      // Extract time dimensions
+      const timeDimensions: Dimension[] = (components.timeDimensions || [])
+        .map(dim => ({
+          id: dim.id,
+          name: dim.name || dim.id,
+          position: dim.position,
+          type: 'TimeDimension' as const,
+          conceptIdentity: dim.conceptIdentity,
+          representation: dim.representation
+        }));
+
+      log('\n=== Dimension List Retrieved ===');
+      log('Dimensions:', dimensions.length);
+      log('Time Dimensions:', timeDimensions.length);
+
+      return {
+        dimensions: dimensions.sort((a, b) => a.position - b.position),
+        timeDimensions: timeDimensions.sort((a, b) => a.position - b.position)
+      };
+    } catch (error) {
+      log('\n=== getDimensionList Error ===');
+      log("Error getting dimension list:", error);
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
 }
 
 // Initialize API client
@@ -280,6 +391,11 @@ const GetMetadataSchema = z.object({
     'none', 'parents', 'parentsandsiblings', 'children',
     'descendants', 'all'
   ]).optional()
+});
+
+// Add new schema
+const GetDimensionListSchema = z.object({
+  dataflowId: z.string()
 });
 
 // Tool definitions
@@ -417,6 +533,20 @@ const tools: Tool[] = [
       },
       required: ["dataflowId", "metadataType"]
     }
+  },
+  {
+    name: "get_dimension_list",
+    description: "Get the list of dimensions and time dimensions for a given dataflow. MUST do this before constructing the dataKey for get_data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataflowId: {
+          type: "string",
+          description: "The dataflow ID to get dimensions for (e.g., 'ABS_ANNUAL_ERP_ASGS2021')"
+        }
+      },
+      required: ["dataflowId"]
+    }
   }
 ];
 
@@ -504,6 +634,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return { toolResult: "No data exists" };
         }
         return { toolResult: structure };
+      }
+
+      case "get_dimension_list": {
+        const args = GetDimensionListSchema.parse(request.params.arguments);
+        const dimensionList = await apiClient.getDimensionList(args.dataflowId);
+        return { toolResult: dimensionList };
       }
 
       default:
