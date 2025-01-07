@@ -631,7 +631,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         console.log(structure);
         if (structure === "Could not find requested structures") {
-          return { toolResult: "No data exists" };
+          return { toolResult: "No data available for this dataflow" };
         }
         return { toolResult: structure };
       }
